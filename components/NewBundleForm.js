@@ -38,6 +38,12 @@ export default function NewBundleForm({ onCancel, onSave }) {
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }
+  export const BUNDLE_STATUSES = [
+    "Watching",
+    "Purchased",
+    "Listed",
+    "Sold",
+  ];
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -174,6 +180,7 @@ export default function NewBundleForm({ onCancel, onSave }) {
             ))}
           </select>
         </label>
+        
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-graphite-500">Listing link</span>
