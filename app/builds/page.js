@@ -18,7 +18,11 @@ export default function BuildsPage() {
     setLoading(true);
     const [{ data: buildsData, error: buildsError }, { data: partsData }] =
       await Promise.all([
-        supabase.from("builds").select("*").order("created_at", { ascending: false }),
+        supabase
+          .from("builds")
+          .select("*")
+          .eq("sold", false)
+          .order("created_at", { ascending: false }),
         supabase.from("parts").select("*").not("build_id", "is", null),
       ]);
     if (buildsError) setErrorMsg(buildsError.message);

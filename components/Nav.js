@@ -15,7 +15,7 @@ export default function Nav() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-graphite-700 bg-graphite-950/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
+      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4 sm:px-10">
         <Link href="/parts" className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-md bg-trace-500/10 text-trace-400 ring-1 ring-trace-500/30">
             <Cpu size={18} />

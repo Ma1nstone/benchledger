@@ -18,6 +18,8 @@ export default function NewPartForm({ onCancel, onSave }) {
   const [preview, setPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [addMessage, setAddMessage] = useState(false);
+  const [messageBody, setMessageBody] = useState("");
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -36,10 +38,14 @@ export default function NewPartForm({ onCancel, onSave }) {
       setError("Give the part a name.");
       return;
     }
+    if (addMessage && !messageBody.trim()) {
+      setError("Write a note, or uncheck \u201cAdd to Messages\u201d.");
+      return;
+    }
     setError("");
     setSaving(true);
     try {
-      await onSave(form, file);
+      await onSave(form, file, addMessage ? messageBody.trim() : null);
     } catch (err) {
       setError(err.message || "Something went wrong saving this part.");
     } finally {
@@ -145,6 +151,25 @@ export default function NewPartForm({ onCancel, onSave }) {
           </div>
         </label>
       </div>
+
+      <label className="mt-4 flex items-center gap-2 text-sm text-graphite-400">
+        <input
+          type="checkbox"
+          checked={addMessage}
+          onChange={(e) => setAddMessage(e.target.checked)}
+          className="h-4 w-4 rounded border-graphite-600 bg-graphite-800 accent-trace-500"
+        />
+        Add a note about this part to Messages
+      </label>
+      {addMessage && (
+        <textarea
+          value={messageBody}
+          onChange={(e) => setMessageBody(e.target.value)}
+          placeholder="e.g. Seller says original box included, arrives Friday…"
+          rows={2}
+          className="mt-2 w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+        />
+      )}
 
       {error && <p className="mt-3 text-sm text-signal-red">{error}</p>}
 

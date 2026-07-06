@@ -2,9 +2,9 @@
 
 import { Search, X } from "lucide-react";
 
-export default function SearchBar({ value, onChange, placeholder }) {
+export default function SearchBar({ value, onChange, placeholder, className }) {
   return (
-    <div className="relative w-full max-w-sm">
+    <div className={`relative w-full min-w-[180px] ${className || "max-w-sm"}`}>
       <Search
         size={16}
         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-graphite-500"

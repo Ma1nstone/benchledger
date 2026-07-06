@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ImagePlus, Plus, X } from "lucide-react";
+import { ArrowLeft, Check, ImagePlus, Plus, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
 import { CATEGORIES, ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
@@ -24,6 +24,8 @@ export default function BuildDetailPage() {
   const [pickerCategory, setPickerCategory] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [soldPrice, setSoldPrice] = useState("");
+  const [markingSold, setMarkingSold] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -112,6 +114,24 @@ export default function BuildDetailPage() {
     setAllParts((prev) =>
       prev.map((p) => (p.id === part.id ? { ...p, build_id: null } : p))
     );
+  }
+
+  async function markAsSold() {
+    setMarkingSold(true);
+    const { error } = await supabase
+      .from("builds")
+      .update({
+        sold: true,
+        sold_price: soldPrice === "" ? null : Number(soldPrice),
+        sold_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    setMarkingSold(false);
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    router.push("/sales");
   }
 
   if (loading) return <p className="text-sm text-graphite-500">Loading build…</p>;
@@ -234,6 +254,33 @@ export default function BuildDetailPage() {
             {complete ? "Complete" : "Missing parts"}
           </span>
         </div>
+
+        {build.sold ? (
+          <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-signal-green/10 px-3 py-1.5 text-xs font-semibold text-signal-green ring-1 ring-signal-green/40 sm:ml-2">
+            <Check size={13} />
+            Sold{build.sold_price != null ? ` for ${formatPrice(build.sold_price)}` : ""}
+          </span>
+        ) : (
+          <div className="flex shrink-0 flex-col gap-2 sm:ml-2 sm:w-44">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={soldPrice}
+              onChange={(e) => setSoldPrice(e.target.value)}
+              placeholder="Sale price ($)"
+              className="rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+            />
+            <button
+              onClick={markAsSold}
+              disabled={markingSold}
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-signal-green/15 px-3 py-2 text-xs font-semibold text-signal-green ring-1 ring-signal-green/40 transition hover:bg-signal-green/25 disabled:opacity-60"
+            >
+              <Check size={14} />
+              Mark as Sold
+            </button>
+          </div>
+        )}
       </div>
 
       {errorMsg && (

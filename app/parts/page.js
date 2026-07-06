@@ -10,11 +10,13 @@ import NewPartForm from "@/components/NewPartForm";
 import NewBundleForm from "@/components/NewBundleForm";
 import PartCard from "@/components/PartCard";
 import BundleCard from "@/components/BundleCard";
+import MessagesPanel from "@/components/MessagesPanel";
 
 export default function PartsPage() {
   const [parts, setParts] = useState([]);
   const [bundles, setBundles] = useState([]);
   const [builds, setBuilds] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeForm, setActiveForm] = useState(null); // null | "part" | "bundle"
   const [search, setSearch] = useState("");
@@ -26,16 +28,19 @@ export default function PartsPage() {
       { data: partsData, error: partsError },
       { data: bundlesData, error: bundlesError },
       { data: buildsData },
+      { data: messagesData },
     ] = await Promise.all([
       supabase.from("parts").select("*").order("created_at", { ascending: false }),
       supabase.from("bundles").select("*").order("created_at", { ascending: false }),
       supabase.from("builds").select("id, name"),
+      supabase.from("messages").select("*").order("created_at", { ascending: false }),
     ]);
     if (partsError) setErrorMsg(partsError.message);
     if (bundlesError) setErrorMsg(bundlesError.message);
     setParts(partsData || []);
     setBundles(bundlesData || []);
     setBuilds(buildsData || []);
+    setMessages(messagesData || []);
     setLoading(false);
   }
 
@@ -94,7 +99,7 @@ export default function PartsPage() {
     });
   }, [standaloneParts, bundles, partsByBundleId, search]);
 
-  async function handleSavePart(form, file) {
+  async function handleSavePart(form, file, messageBody) {
     let image_url = null;
     if (file) {
       image_url = await uploadImage(file, "parts");
@@ -114,6 +119,16 @@ export default function PartsPage() {
 
     if (error) throw error;
     setParts((prev) => [data, ...prev]);
+
+    if (messageBody) {
+      const { data: message, error: messageError } = await supabase
+        .from("messages")
+        .insert({ part_id: data.id, body: messageBody })
+        .select()
+        .single();
+      if (!messageError) setMessages((prev) => [message, ...prev]);
+    }
+
     setActiveForm(null);
   }
 
@@ -201,15 +216,28 @@ export default function PartsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="shrink-0">
           <h1 className="font-display text-2xl font-bold text-white">Parts</h1>
           <p className="text-sm text-graphite-500">
             Everything you&rsquo;ve bought, ready to slot into a build or flip on its own.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <SearchBar value={search} onChange={setSearch} placeholder="Search parts…" />
+        <div className="flex flex-1 flex-wrap items-center gap-3 lg:justify-end">
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="Search parts…"
+            className="flex-1 lg:max-w-md"
+          />
+          <MessagesPanel
+            messages={messages}
+            onMarkedSeen={(ids) =>
+              setMessages((prev) =>
+                prev.map((m) => (ids.includes(m.id) ? { ...m, seen: true } : m))
+              )
+            }
+          />
           <button
             onClick={() => setActiveForm(activeForm === "bundle" ? null : "bundle")}
             className="flex shrink-0 items-center gap-2 rounded-lg border border-signal-amber/40 bg-signal-amber/10 px-4 py-2.5 text-sm font-semibold text-signal-amber transition hover:bg-signal-amber/20"
