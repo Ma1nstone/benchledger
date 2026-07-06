@@ -16,13 +16,7 @@ export default function NewBundleForm({ onCancel, onSave }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-export const BUNDLE_STATUSES = [
-  "Watching",
-  "Purchased",
-  "Listed",
-  "Sold",
-];    
+  const [error, setError] = useState("");  
 
   function updateItem(index, field, value) {
     setItems((prev) =>
