@@ -17,6 +17,12 @@ export default function NewBundleForm({ onCancel, onSave }) {
   const [preview, setPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+export const BUNDLE_STATUSES = [
+  "Watching",
+  "Purchased",
+  "Listed",
+  "Sold",
+];    
 
   function updateItem(index, field, value) {
     setItems((prev) =>
@@ -38,12 +44,7 @@ export default function NewBundleForm({ onCancel, onSave }) {
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }
-  export const BUNDLE_STATUSES = [
-    "Watching",
-    "Purchased",
-    "Listed",
-    "Sold",
-  ];
+  
 
   async function handleSubmit(e) {
     e.preventDefault();
