@@ -32,7 +32,7 @@ export default function PartsPage() {
     ] = await Promise.all([
       supabase.from("parts").select("*").order("created_at", { ascending: false }),
       supabase.from("bundles").select("*").order("created_at", { ascending: false }),
-      supabase.from("builds").select("id, name"),
+      supabase.from("builds").select("id, name, sold"),
       supabase.from("messages").select("*").order("created_at", { ascending: false }),
     ]);
     if (partsError) setErrorMsg(partsError.message);
@@ -54,22 +54,43 @@ export default function PartsPage() {
     return map;
   }, [builds]);
 
-  const standaloneParts = useMemo(() => parts.filter((p) => !p.bundle_id), [parts]);
+  // Once a build is marked Sold, its parts disappear from the Parts page
+  // entirely (not just tagged USED) — they're done, no longer inventory.
+  const soldBuildIds = useMemo(
+    () => new Set(builds.filter((b) => b.sold).map((b) => b.id)),
+    [builds]
+  );
+
+  const visibleParts = useMemo(
+    () => parts.filter((p) => !p.build_id || !soldBuildIds.has(p.build_id)),
+    [parts, soldBuildIds]
+  );
+
+  const standaloneParts = useMemo(
+    () => visibleParts.filter((p) => !p.bundle_id),
+    [visibleParts]
+  );
 
   const partsByBundleId = useMemo(() => {
     const map = {};
-    parts.forEach((p) => {
+    visibleParts.forEach((p) => {
       if (!p.bundle_id) return;
       map[p.bundle_id] = map[p.bundle_id] || [];
       map[p.bundle_id].push(p);
     });
     return map;
-  }, [parts]);
+  }, [visibleParts]);
+
+  // Hide a bundle entirely once every part inside it has been sold off.
+  const visibleBundles = useMemo(
+    () => bundles.filter((b) => (partsByBundleId[b.id] || []).length > 0),
+    [bundles, partsByBundleId]
+  );
 
   // Merge standalone parts and bundles into one feed, newest first, then filter by search.
   const feed = useMemo(() => {
     const partItems = standaloneParts.map((p) => ({ type: "part", data: p, created_at: p.created_at }));
-    const bundleItems = bundles.map((b) => ({ type: "bundle", data: b, created_at: b.created_at }));
+    const bundleItems = visibleBundles.map((b) => ({ type: "bundle", data: b, created_at: b.created_at }));
     const combined = [...partItems, ...bundleItems].sort(
       (a, b) => new Date(b.created_at) - new Date(a.created_at)
     );
@@ -232,6 +253,7 @@ export default function PartsPage() {
           />
           <MessagesPanel
             messages={messages}
+            parts={parts}
             onMarkedSeen={(ids) =>
               setMessages((prev) =>
                 prev.map((m) => (ids.includes(m.id) ? { ...m, seen: true } : m))
@@ -273,7 +295,7 @@ export default function PartsPage() {
       ) : feed.length === 0 ? (
         <div className="rounded-xl border border-dashed border-graphite-700 bg-graphite-900/50 p-10 text-center">
           <p className="text-graphite-400">
-            {parts.length === 0 && bundles.length === 0
+            {visibleParts.length === 0 && visibleBundles.length === 0
               ? "No parts yet — click \u201cNew part\u201d to add your first one."
               : "Nothing matches your search."}
           </p>

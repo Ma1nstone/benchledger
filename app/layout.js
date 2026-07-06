@@ -5,8 +5,11 @@ export const metadata = {
   title: "BenchLedger — Parts, Builds & Sales",
   description: "Track PC parts inventory, assemble builds, and manage sales.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon.ico",
     apple: "/favicon.svg",
   },
 };
@@ -15,8 +18,12 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
-        {/* Explicit tag as a fallback in case metadata.icons doesn't take
-            effect after a cached deploy — this line always forces the icon. */}
+        {/* Explicit tags as a fallback in case metadata.icons doesn't take
+            effect after a cached deploy — these always force the icon.
+            favicon.ico is included because browsers request /favicon.ico
+            automatically regardless of these tags; without a real file
+            there, that request 404s even if the SVG icon itself is fine. */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link

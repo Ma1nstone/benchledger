@@ -16,7 +16,7 @@ export default function NewBundleForm({ onCancel, onSave }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");  
+  const [error, setError] = useState("");
 
   function updateItem(index, field, value) {
     setItems((prev) =>
@@ -38,7 +38,6 @@ export default function NewBundleForm({ onCancel, onSave }) {
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }
-  
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -134,7 +133,7 @@ export default function NewBundleForm({ onCancel, onSave }) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-graphite-500">Total price paid ($)</span>
+          <span className="text-graphite-500">Total price paid (£)</span>
           <input
             type="number"
             step="0.01"
@@ -175,7 +174,6 @@ export default function NewBundleForm({ onCancel, onSave }) {
             ))}
           </select>
         </label>
-        
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-graphite-500">Listing link</span>

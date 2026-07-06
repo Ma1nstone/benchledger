@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Tag } from "lucide-react";
+import { Tag, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/constants";
 
@@ -9,28 +9,46 @@ export default function SalesPage() {
   const [builds, setBuilds] = useState([]);
   const [parts, setParts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    async function load() {
-      const [{ data: buildsData }, { data: partsData }] = await Promise.all([
-        supabase
-          .from("builds")
-          .select("*")
-          .eq("sold", true)
-          .order("sold_at", { ascending: false }),
-        supabase.from("parts").select("id, build_id, price"),
-      ]);
-      setBuilds(buildsData || []);
-      setParts(partsData || []);
-      setLoading(false);
-    }
     load();
   }, []);
+
+  async function load() {
+    setLoading(true);
+    const [{ data: buildsData }, { data: partsData }] = await Promise.all([
+      supabase
+        .from("builds")
+        .select("*")
+        .eq("sold", true)
+        .order("sold_at", { ascending: false }),
+      supabase.from("parts").select("id, build_id, price"),
+    ]);
+    setBuilds(buildsData || []);
+    setParts(partsData || []);
+    setLoading(false);
+  }
 
   function costFor(buildId) {
     return parts
       .filter((p) => p.build_id === buildId)
       .reduce((sum, p) => sum + (Number(p.price) || 0), 0);
+  }
+
+  async function handleDelete(build) {
+    if (
+      !confirm(
+        `Delete the sale record for "${build.name}"? Its parts will go back to unused inventory. This can't be undone.`
+      )
+    )
+      return;
+    const { error } = await supabase.from("builds").delete().eq("id", build.id);
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setBuilds((prev) => prev.filter((b) => b.id !== build.id));
   }
 
   return (
@@ -41,6 +59,12 @@ export default function SalesPage() {
           Builds you&rsquo;ve marked as sold, most recent first.
         </p>
       </div>
+
+      {errorMsg && (
+        <p className="mb-4 rounded-lg border border-signal-red/40 bg-signal-red/10 px-4 py-2 text-sm text-signal-red">
+          {errorMsg}
+        </p>
+      )}
 
       {loading ? (
         <p className="text-sm text-graphite-500">Loading sales…</p>
@@ -91,6 +115,14 @@ export default function SalesPage() {
                     {formatPrice(profit)}
                   </p>
                 </div>
+                <button
+                  onClick={() => handleDelete(build)}
+                  className="shrink-0 rounded-lg p-2 text-graphite-500 hover:bg-signal-red/10 hover:text-signal-red"
+                  aria-label={`Delete sale record for ${build.name}`}
+                  title="Delete this sale record"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             );
           })}

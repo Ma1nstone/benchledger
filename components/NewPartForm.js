@@ -99,7 +99,7 @@ export default function NewPartForm({ onCancel, onSave }) {
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-graphite-500">Price paid ($)</span>
+          <span className="text-graphite-500">Price paid (£)</span>
           <input
             type="number"
             step="0.01"

@@ -268,7 +268,7 @@ export default function BuildDetailPage() {
               min="0"
               value={soldPrice}
               onChange={(e) => setSoldPrice(e.target.value)}
-              placeholder="Sale price ($)"
+              placeholder="Sale price (£)"
               className="rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
             />
             <button
