@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Layers, Plus } from "lucide-react";
+import { Layers, MonitorSmartphone, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
 import { splitEvenly } from "@/lib/constants";
 import SearchBar from "@/components/SearchBar";
 import NewPartForm from "@/components/NewPartForm";
 import NewBundleForm from "@/components/NewBundleForm";
+import NewPCForm from "@/components/NewPCForm";
 import PartCard from "@/components/PartCard";
 import BundleCard from "@/components/BundleCard";
 import MessagesPanel from "@/components/MessagesPanel";
@@ -18,7 +19,7 @@ export default function PartsPage() {
   const [builds, setBuilds] = useState([]);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeForm, setActiveForm] = useState(null); // null | "part" | "bundle"
+  const [activeForm, setActiveForm] = useState(null); // null | "part" | "bundle" | "pc"
   const [search, setSearch] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -118,7 +119,7 @@ export default function PartsPage() {
         )
       );
     });
-  }, [standaloneParts, bundles, partsByBundleId, search]);
+  }, [standaloneParts, visibleBundles, partsByBundleId, search]);
 
   async function handleSavePart(form, file, messageBody) {
     let image_url = null;
@@ -131,6 +132,7 @@ export default function PartsPage() {
         category: form.category,
         name: form.name.trim(),
         price: form.price === "" ? 0 : Number(form.price),
+        price_type: form.price_type || "Bought",
         marketplace: form.marketplace,
         link: form.link.trim() || null,
         image_url,
@@ -198,6 +200,44 @@ export default function PartsPage() {
     setActiveForm(null);
   }
 
+  async function handleSavePC(form, file) {
+    let image_url = null;
+    if (file) {
+      image_url = await uploadImage(file, "builds");
+    }
+
+    const { data: build, error: buildError } = await supabase
+      .from("builds")
+      .insert({ name: form.pcName, image_url })
+      .select()
+      .single();
+
+    if (buildError) throw buildError;
+
+    const total = form.totalPrice === "" ? 0 : Number(form.totalPrice);
+    const prices = splitEvenly(total, form.items.length);
+    const rows = form.items.map((item, i) => ({
+      category: item.category,
+      name: item.name.trim(),
+      price: prices[i],
+      price_type: form.priceType || "Bought",
+      marketplace: form.marketplace,
+      link: form.link.trim() || null,
+      build_id: build.id,
+    }));
+
+    const { data: newParts, error: partsError } = await supabase
+      .from("parts")
+      .insert(rows)
+      .select();
+
+    if (partsError) throw partsError;
+
+    setBuilds((prev) => [{ id: build.id, name: build.name, sold: false }, ...prev]);
+    setParts((prev) => [...newParts, ...prev]);
+    setActiveForm(null);
+  }
+
   async function handleDeletePart(part) {
     if (!confirm(`Delete "${part.name}"? This can't be undone.`)) return;
     const { error } = await supabase.from("parts").delete().eq("id", part.id);
@@ -261,6 +301,13 @@ export default function PartsPage() {
             }
           />
           <button
+            onClick={() => setActiveForm(activeForm === "pc" ? null : "pc")}
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-graphite-600 bg-graphite-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-graphite-500"
+          >
+            <MonitorSmartphone size={16} />
+            Add PC
+          </button>
+          <button
             onClick={() => setActiveForm(activeForm === "bundle" ? null : "bundle")}
             className="flex shrink-0 items-center gap-2 rounded-lg border border-signal-amber/40 bg-signal-amber/10 px-4 py-2.5 text-sm font-semibold text-signal-amber transition hover:bg-signal-amber/20"
           >
@@ -282,6 +329,9 @@ export default function PartsPage() {
       )}
       {activeForm === "bundle" && (
         <NewBundleForm onCancel={() => setActiveForm(null)} onSave={handleSaveBundle} />
+      )}
+      {activeForm === "pc" && (
+        <NewPCForm onCancel={() => setActiveForm(null)} onSave={handleSavePC} />
       )}
 
       {errorMsg && (
@@ -325,4 +375,3 @@ export default function PartsPage() {
     </div>
   );
 }
-

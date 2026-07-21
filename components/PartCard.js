@@ -5,6 +5,7 @@ import { formatPrice } from "@/lib/constants";
 
 export default function PartCard({ part, buildName, onDelete }) {
   const used = Boolean(part.build_id);
+  const isOffer = part.price_type === "Offer";
 
   return (
     <div className="flex items-center gap-4 rounded-xl border border-graphite-700 bg-graphite-900 p-4 transition hover:border-graphite-600">
@@ -26,6 +27,11 @@ export default function PartCard({ part, buildName, onDelete }) {
           <span className="rounded-full bg-graphite-800 px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-trace-400 ring-1 ring-graphite-700">
             {part.category}
           </span>
+          {isOffer && (
+            <span className="rounded-full bg-signal-amber/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-signal-amber ring-1 ring-signal-amber/40">
+              Offer
+            </span>
+          )}
           {used && (
             <span className="rounded-full bg-signal-red/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-signal-red ring-1 ring-signal-red/40">
               USED{buildName ? ` — ${buildName}` : ""}

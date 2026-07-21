@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { ImagePlus, Loader2, X } from "lucide-react";
-import { CATEGORIES, MARKETPLACES } from "@/lib/constants";
+import { CATEGORIES, MARKETPLACES, PRICE_TYPES } from "@/lib/constants";
 
 const empty = {
   category: CATEGORIES[0],
   name: "",
   price: "",
+  price_type: "Bought",
   marketplace: MARKETPLACES[0],
   link: "",
 };
@@ -99,16 +100,38 @@ export default function NewPartForm({ onCancel, onSave }) {
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="text-graphite-500">Price paid (£)</span>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={form.price}
-            onChange={(e) => update("price", e.target.value)}
-            placeholder="0.00"
-            className="rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-white placeholder:text-graphite-500"
-          />
+          <span className="text-graphite-500">
+            {form.price_type === "Offer" ? "Offer price (£)" : "Bought price (£)"}
+          </span>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.price}
+              onChange={(e) => update("price", e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-white placeholder:text-graphite-500"
+            />
+            <div className="flex shrink-0 overflow-hidden rounded-lg border border-graphite-700">
+              {PRICE_TYPES.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => update("price_type", t)}
+                  className={`px-2.5 py-2 text-xs font-semibold transition ${
+                    form.price_type === t
+                      ? t === "Offer"
+                        ? "bg-signal-amber/20 text-signal-amber"
+                        : "bg-trace-500/20 text-trace-400"
+                      : "bg-graphite-800 text-graphite-500 hover:text-white"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
