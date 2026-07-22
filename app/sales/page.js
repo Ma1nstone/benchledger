@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, Tag, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/constants";
+import { ChevronDown, Tag, Trash2, RotateCcw } from "lucide-react";
 
 export default function SalesPage() {
   const [builds, setBuilds] = useState([]);
@@ -54,6 +55,20 @@ export default function SalesPage() {
     }
     setBuilds((prev) => prev.filter((b) => b.id !== build.id));
   }
+  async function handleRestore(e, build) {
+    e.stopPropagation();
+    if (!confirm(`Move "${build.name}" back to Builds? It'll be marked as unsold.`)) return;
+    const { error } = await supabase
+      .from("builds")
+      .update({ sold: false, sold_price: null, sold_at: null })
+      .eq("id", build.id);
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setBuilds((prev) => prev.filter((b) => b.id !== build.id));
+  }
+
 
   return (
     <div>
@@ -143,6 +158,14 @@ export default function SalesPage() {
                       {formatPrice(profit)}
                     </p>
                   </div>
+                  <button
+                    onClick={(e) => handleRestore(e, build)}
+                    className="shrink-0 rounded-lg p-2 text-graphite-500 hover:bg-signal-green/10 hover:text-signal-green"
+                    aria-label={`Move ${build.name} back to Builds`}
+                    title="Move back to Builds"
+                  >
+                    <RotateCcw size={16} />
+                  </button>
 
                   <button
                     onClick={(e) => handleDelete(e, build)}
