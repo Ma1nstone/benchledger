@@ -26,6 +26,8 @@ export default function BuildDetailPage() {
   const [saving, setSaving] = useState(false);
   const [soldPrice, setSoldPrice] = useState("");
   const [markingSold, setMarkingSold] = useState(false);
+  const [offerPrice, setOfferPrice] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -41,6 +43,8 @@ export default function BuildDetailPage() {
     }
     setBuild(buildData);
     setName(buildData.name);
+    setOfferPrice(buildData.offer_price != null ? String(buildData.offer_price) : "");
+    setSellPrice(buildData.sell_price != null ? String(buildData.sell_price) : "");
     setAllParts(partsData || []);
     setLoading(false);
   }, [id]);
@@ -53,6 +57,8 @@ export default function BuildDetailPage() {
     () => allParts.filter((p) => p.build_id === id),
     [allParts, id]
   );
+  // This total always reflects whatever parts are currently assigned —
+  // it's never a typed-in value, only the parts inside can change it.
   const total = assignedParts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
   const complete = ESSENTIAL_CATEGORIES.every((cat) =>
     assignedParts.some((p) => p.category === cat)
@@ -65,6 +71,28 @@ export default function BuildDetailPage() {
     setSaving(false);
     if (error) setErrorMsg(error.message);
     else setBuild((b) => ({ ...b, name }));
+  }
+
+  async function saveOfferPrice() {
+    if (!build) return;
+    const value = offerPrice === "" ? null : Number(offerPrice);
+    if (value === build.offer_price) return;
+    setSaving(true);
+    const { error } = await supabase.from("builds").update({ offer_price: value }).eq("id", id);
+    setSaving(false);
+    if (error) setErrorMsg(error.message);
+    else setBuild((b) => ({ ...b, offer_price: value }));
+  }
+
+  async function saveSellPrice() {
+    if (!build) return;
+    const value = sellPrice === "" ? null : Number(sellPrice);
+    if (value === build.sell_price) return;
+    setSaving(true);
+    const { error } = await supabase.from("builds").update({ sell_price: value }).eq("id", id);
+    setSaving(false);
+    if (error) setErrorMsg(error.message);
+    else setBuild((b) => ({ ...b, sell_price: value }));
   }
 
   async function handleImageChange(e) {
@@ -144,6 +172,10 @@ export default function BuildDetailPage() {
         </Link>
       </div>
     );
+
+  // sell_price is only ever set by the Estimate tool, so its presence is
+  // what marks this build as estimate-created.
+  const isFromEstimate = build.sell_price != null;
 
   const renderCategorySection = (category) => {
     const items = assignedParts.filter((p) => p.category === category);
@@ -279,6 +311,49 @@ export default function BuildDetailPage() {
               <Check size={14} />
               Mark as Sold
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Pricing: total is always the sum of parts below and can't be typed
+          into directly. Offer price is editable on every build. Sell price
+          only appears on builds that came from the Estimate tool. */}
+      <div className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-graphite-700 bg-graphite-900 p-4 sm:grid-cols-3">
+        <div className="rounded-lg bg-graphite-800/60 p-3">
+          <p className="text-xs text-graphite-500">Estimate (sum of parts)</p>
+          <p className="mt-1 font-mono text-lg font-bold text-white">{formatPrice(total)}</p>
+          <p className="mt-1 text-[11px] text-graphite-600">
+            Always the total of the parts below — edit them to change this.
+          </p>
+        </div>
+
+        <div className="rounded-lg bg-signal-red/10 p-3 ring-1 ring-signal-red/30">
+          <label className="text-xs text-signal-red">Offer price</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={offerPrice}
+            onChange={(e) => setOfferPrice(e.target.value)}
+            onBlur={saveOfferPrice}
+            placeholder="£ offer"
+            className="mt-1 w-full rounded-lg border border-signal-red/30 bg-graphite-800 px-2 py-1.5 font-mono text-lg font-bold text-signal-red placeholder:text-graphite-600"
+          />
+        </div>
+
+        {isFromEstimate && (
+          <div className="rounded-lg bg-signal-green/10 p-3 ring-1 ring-signal-green/30">
+            <label className="text-xs text-signal-green">Sell price</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={sellPrice}
+              onChange={(e) => setSellPrice(e.target.value)}
+              onBlur={saveSellPrice}
+              placeholder="£ sell"
+              className="mt-1 w-full rounded-lg border border-signal-green/30 bg-graphite-800 px-2 py-1.5 font-mono text-lg font-bold text-signal-green placeholder:text-graphite-600"
+            />
           </div>
         )}
       </div>

@@ -1,14 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Calculator, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Calculator, Trash2, Wrench } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
 import { parseListingText, titleCase } from "@/lib/estimateParser";
 import { estimateRange } from "@/lib/priceReference";
 
 export default function EstimatePanel() {
+  const router = useRouter();
   const [raw, setRaw] = useState("");
   const [items, setItems] = useState([]);
+  const [buildName, setBuildName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   function handleAnalyze() {
     const parsed = parseListingText(raw).map((item) => {
@@ -32,6 +38,43 @@ export default function EstimatePanel() {
   // to the nearest £5 so the numbers look like real offers, not maths.
   const offerPrice = Math.round((total * 0.85) / 5) * 5;
   const sellPrice = Math.round((total * 1.15) / 5) * 5;
+
+  async function handleAddToBuilds() {
+    if (items.length === 0) return;
+    setSaving(true);
+    setErrorMsg("");
+    try {
+      // sell_price is only ever written here — that's what makes it
+      // exclusive to builds created through the estimator.
+      const { data: build, error: buildError } = await supabase
+        .from("builds")
+        .insert({
+          name: buildName.trim() || "Estimated Build",
+          offer_price: offerPrice,
+          sell_price: sellPrice,
+        })
+        .select()
+        .single();
+      if (buildError) throw buildError;
+
+      const rows = items.map((item) => ({
+        category: item.category,
+        name: titleCase(item.text),
+        price: Number(item.price) || 0,
+        price_type: "Bought",
+        marketplace: "eBay",
+        build_id: build.id,
+      }));
+
+      const { error: partsError } = await supabase.from("parts").insert(rows);
+      if (partsError) throw partsError;
+
+      router.push(`/builds/${build.id}`);
+    } catch (err) {
+      setErrorMsg(err.message);
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -128,6 +171,29 @@ export default function EstimatePanel() {
                 {formatPrice(sellPrice)}
               </p>
             </div>
+          </div>
+
+          {errorMsg && (
+            <p className="mt-3 rounded-lg border border-signal-red/40 bg-signal-red/10 px-3 py-2 text-xs text-signal-red">
+              {errorMsg}
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-col gap-2 border-t border-graphite-700 pt-4 sm:flex-row sm:items-center">
+            <input
+              value={buildName}
+              onChange={(e) => setBuildName(e.target.value)}
+              placeholder="Build name (optional)"
+              className="flex-1 rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+            />
+            <button
+              onClick={handleAddToBuilds}
+              disabled={saving}
+              className="flex items-center justify-center gap-2 rounded-lg bg-trace-500 px-4 py-2.5 text-sm font-semibold text-graphite-950 transition hover:bg-trace-400 disabled:opacity-60"
+            >
+              <Wrench size={16} />
+              {saving ? "Adding…" : "Add to Builds"}
+            </button>
           </div>
         </div>
       )}
