@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, ImagePlus, Plus, X } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, ImagePlus, Link2, Plus, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
 import { CATEGORIES, ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
@@ -19,6 +19,7 @@ export default function BuildDetailPage() {
 
   const [build, setBuild] = useState(null);
   const [name, setName] = useState("");
+  const [link, setLink] = useState("");
   const [allParts, setAllParts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pickerCategory, setPickerCategory] = useState(null);
@@ -43,6 +44,7 @@ export default function BuildDetailPage() {
     }
     setBuild(buildData);
     setName(buildData.name);
+    setLink(buildData.link || "");
     setOfferPrice(buildData.offer_price != null ? String(buildData.offer_price) : "");
     setSellPrice(buildData.sell_price != null ? String(buildData.sell_price) : "");
     setAllParts(partsData || []);
@@ -71,6 +73,17 @@ export default function BuildDetailPage() {
     setSaving(false);
     if (error) setErrorMsg(error.message);
     else setBuild((b) => ({ ...b, name }));
+  }
+
+  async function saveLink() {
+    if (!build) return;
+    const value = link.trim() || null;
+    if (value === build.link) return;
+    setSaving(true);
+    const { error } = await supabase.from("builds").update({ link: value }).eq("id", id);
+    setSaving(false);
+    if (error) setErrorMsg(error.message);
+    else setBuild((b) => ({ ...b, link: value }));
   }
 
   async function saveOfferPrice() {
@@ -144,6 +157,22 @@ export default function BuildDetailPage() {
     );
   }
 
+  // Live-updates the part in local state as the person types.
+  function updatePartField(partId, field, value) {
+    setAllParts((prev) =>
+      prev.map((p) => (p.id === partId ? { ...p, [field]: value } : p))
+    );
+  }
+
+  // Persists whatever is currently in state for that part/field on blur.
+  async function savePartField(partId, field) {
+    const part = allParts.find((p) => p.id === partId);
+    if (!part) return;
+    const value = field === "price" ? Number(part.price) || 0 : (part.name || "").trim();
+    const { error } = await supabase.from("parts").update({ [field]: value }).eq("id", partId);
+    if (error) setErrorMsg(error.message);
+  }
+
   async function markAsSold() {
     setMarkingSold(true);
     const { error } = await supabase
@@ -212,21 +241,31 @@ export default function BuildDetailPage() {
             {items.map((p) => (
               <div
                 key={p.id}
-                className="flex items-center justify-between rounded-lg bg-graphite-800/60 px-3 py-2 text-sm"
+                className="flex items-center gap-2 rounded-lg bg-graphite-800/60 px-3 py-2 text-sm"
               >
-                <span className="truncate text-white">{p.name}</span>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="font-mono text-graphite-400">
-                    {formatPrice(p.price)}
-                  </span>
-                  <button
-                    onClick={() => removePart(p)}
-                    className="text-graphite-500 hover:text-signal-red"
-                    aria-label={`Remove ${p.name}`}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
+                <input
+                  value={p.name}
+                  onChange={(e) => updatePartField(p.id, "name", e.target.value)}
+                  onBlur={() => savePartField(p.id, "name")}
+                  className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-white focus:bg-graphite-900 focus:outline-none focus:ring-1 focus:ring-trace-500"
+                />
+                <span className="shrink-0 font-mono text-graphite-500">£</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={p.price}
+                  onChange={(e) => updatePartField(p.id, "price", e.target.value)}
+                  onBlur={() => savePartField(p.id, "price")}
+                  className="w-20 shrink-0 rounded bg-graphite-900 px-2 py-1 text-right font-mono text-graphite-300 focus:outline-none focus:ring-1 focus:ring-trace-500"
+                />
+                <button
+                  onClick={() => removePart(p)}
+                  className="shrink-0 text-graphite-500 hover:text-signal-red"
+                  aria-label={`Remove ${p.name}`}
+                >
+                  <X size={14} />
+                </button>
               </div>
             ))}
           </div>
@@ -268,6 +307,30 @@ export default function BuildDetailPage() {
             {build.image_url ? "Change photo" : "Add photo"}
             <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
           </label>
+
+          <label className="mb-1 mt-3 flex items-center gap-1.5 text-xs text-graphite-500">
+            <Link2 size={12} />
+            Listing link
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              onBlur={saveLink}
+              placeholder="https://..."
+              className="w-full max-w-sm rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-1.5 text-sm text-white placeholder:text-graphite-500"
+            />
+            {build.link && (
+              <a
+                href={build.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex shrink-0 items-center gap-1 text-xs text-trace-400 hover:text-trace-300"
+              >
+                Open <ExternalLink size={12} />
+              </a>
+            )}
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-6 sm:flex-col sm:items-end sm:gap-1">

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, Trash2, Wrench } from "lucide-react";
+import { Calculator, Link2, Trash2, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
 import { parseListingText, titleCase } from "@/lib/estimateParser";
@@ -13,6 +13,7 @@ export default function EstimatePanel() {
   const [raw, setRaw] = useState("");
   const [items, setItems] = useState([]);
   const [buildName, setBuildName] = useState("");
+  const [buildLink, setBuildLink] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -50,6 +51,7 @@ export default function EstimatePanel() {
         .from("builds")
         .insert({
           name: buildName.trim() || "Estimated Build",
+          link: buildLink.trim() || null,
           offer_price: offerPrice,
           sell_price: sellPrice,
         })
@@ -63,6 +65,7 @@ export default function EstimatePanel() {
         price: Number(item.price) || 0,
         price_type: "Bought",
         marketplace: "eBay",
+        link: buildLink.trim() || null,
         build_id: build.id,
       }));
 
@@ -179,13 +182,24 @@ export default function EstimatePanel() {
             </p>
           )}
 
-          <div className="mt-4 flex flex-col gap-2 border-t border-graphite-700 pt-4 sm:flex-row sm:items-center">
-            <input
-              value={buildName}
-              onChange={(e) => setBuildName(e.target.value)}
-              placeholder="Build name (optional)"
-              className="flex-1 rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
-            />
+          <div className="mt-4 flex flex-col gap-2 border-t border-graphite-700 pt-4">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                value={buildName}
+                onChange={(e) => setBuildName(e.target.value)}
+                placeholder="Build name (optional)"
+                className="flex-1 rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+              />
+              <div className="flex flex-1 items-center gap-2 rounded-lg border border-graphite-700 bg-graphite-800 px-3">
+                <Link2 size={14} className="shrink-0 text-graphite-500" />
+                <input
+                  value={buildLink}
+                  onChange={(e) => setBuildLink(e.target.value)}
+                  placeholder="Listing link (optional)"
+                  className="w-full bg-transparent py-2 text-sm text-white placeholder:text-graphite-500 focus:outline-none"
+                />
+              </div>
+            </div>
             <button
               onClick={handleAddToBuilds}
               disabled={saving}
