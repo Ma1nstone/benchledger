@@ -1,16 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Calculator, Trash2 } from "lucide-react";
+import { Calculator, Trash2 } from "lucide-react";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
-import { parseListingText, ebaySoldLink } from "@/lib/estimateParser";
+import { parseListingText, titleCase } from "@/lib/estimateParser";
+import { estimateRange } from "@/lib/priceReference";
 
 export default function EstimatePanel() {
   const [raw, setRaw] = useState("");
   const [items, setItems] = useState([]);
 
   function handleAnalyze() {
-    setItems(parseListingText(raw).map((item) => ({ ...item, price: "" })));
+    const parsed = parseListingText(raw).map((item) => {
+      const range = estimateRange(item.text, item.category);
+      const suggested = range ? Math.round((range[0] + range[1]) / 2) : "";
+      return { ...item, range, price: suggested === "" ? "" : String(suggested) };
+    });
+    setItems(parsed);
   }
 
   function updateItem(id, field, value) {
@@ -22,6 +28,10 @@ export default function EstimatePanel() {
   }
 
   const total = items.reduce((sum, it) => sum + (Number(it.price) || 0), 0);
+  // Offer ~15% under the estimated total, sell price ~15% over — rounded
+  // to the nearest £5 so the numbers look like real offers, not maths.
+  const offerPrice = Math.round((total * 0.85) / 5) * 5;
+  const sellPrice = Math.round((total * 1.15) / 5) * 5;
 
   return (
     <div className="flex flex-col gap-5">
@@ -49,8 +59,9 @@ export default function EstimatePanel() {
       {items.length > 0 && (
         <div className="rounded-xl border border-graphite-700 bg-graphite-900 p-4">
           <p className="mb-3 text-xs text-graphite-500">
-            Detected {items.length} line{items.length === 1 ? "" : "s"}. Click &ldquo;Check sold
-            prices&rdquo; for each, then type in what you find — the total updates automatically.
+            Detected {items.length} spec line{items.length === 1 ? "" : "s"}. Prices are
+            pre-filled from built-in ballpark estimates where recognised — edit any of them if
+            you know better.
           </p>
           <div className="flex flex-col gap-2">
             {items.map((item) => (
@@ -70,18 +81,14 @@ export default function EstimatePanel() {
                   ))}
                 </select>
 
-                <span className="min-w-0 flex-1 truncate text-sm text-graphite-200">
-                  {item.text}
-                </span>
-
-                <a
-                  href={ebaySoldLink(item.text)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex shrink-0 items-center gap-1 text-xs text-trace-400 hover:text-trace-300"
-                >
-                  Check sold prices <ExternalLink size={12} />
-                </a>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-graphite-200">{titleCase(item.text)}</p>
+                  {item.range && (
+                    <p className="text-[11px] text-graphite-500">
+                      Ballpark: {formatPrice(item.range[0])} – {formatPrice(item.range[1])}
+                    </p>
+                  )}
+                </div>
 
                 <input
                   type="number"
@@ -104,9 +111,23 @@ export default function EstimatePanel() {
             ))}
           </div>
 
-          <div className="mt-4 flex items-center justify-between border-t border-graphite-700 pt-3">
-            <span className="text-sm text-graphite-400">Estimated parts total</span>
-            <span className="font-mono text-xl font-bold text-white">{formatPrice(total)}</span>
+          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-graphite-700 pt-4 sm:grid-cols-3">
+            <div className="rounded-lg bg-graphite-800/60 p-3 text-center">
+              <p className="text-xs text-graphite-500">Estimated parts total</p>
+              <p className="mt-1 font-mono text-lg font-bold text-white">{formatPrice(total)}</p>
+            </div>
+            <div className="rounded-lg bg-signal-red/10 p-3 text-center ring-1 ring-signal-red/30">
+              <p className="text-xs text-signal-red">Offer around</p>
+              <p className="mt-1 font-mono text-lg font-bold text-signal-red">
+                {formatPrice(offerPrice)}
+              </p>
+            </div>
+            <div className="rounded-lg bg-signal-green/10 p-3 text-center ring-1 ring-signal-green/30">
+              <p className="text-xs text-signal-green">Sell around</p>
+              <p className="mt-1 font-mono text-lg font-bold text-signal-green">
+                {formatPrice(sellPrice)}
+              </p>
+            </div>
           </div>
         </div>
       )}
