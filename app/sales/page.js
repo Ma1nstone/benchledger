@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Tag, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/constants";
 import { ChevronDown, Tag, Trash2, RotateCcw } from "lucide-react";
