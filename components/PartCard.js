@@ -3,12 +3,26 @@
 import { ExternalLink, Trash2, Package } from "lucide-react";
 import { formatPrice } from "@/lib/constants";
 
-export default function PartCard({ part, buildName, onDelete }) {
+export default function PartCard({ part, buildName, onDelete, selectable, selected, onToggleSelect }) {
   const used = Boolean(part.build_id);
   const isOffer = part.price_type === "Offer";
 
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-graphite-700 bg-graphite-900 p-4 transition hover:border-graphite-600">
+    <div
+      className={`flex items-center gap-4 rounded-xl border bg-graphite-900 p-4 transition ${
+        selected ? "border-trace-500/60 bg-trace-500/5" : "border-graphite-700 hover:border-graphite-600"
+      }`}
+    >
+      {selectable && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(part)}
+          className="h-4 w-4 shrink-0 rounded border-graphite-600 bg-graphite-800 accent-trace-500"
+          aria-label={`Select ${part.name}`}
+        />
+      )}
+
       <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-graphite-800 ring-1 ring-graphite-700">
         {part.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element

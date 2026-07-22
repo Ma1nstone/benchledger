@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Layers, MonitorSmartphone, Plus } from "lucide-react";
+import { CheckSquare, Layers, ListFilter, MonitorSmartphone, Plus, Square, Trash2, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
-import { splitEvenly } from "@/lib/constants";
+import { CATEGORIES, MARKETPLACES, splitEvenly } from "@/lib/constants";
 import SearchBar from "@/components/SearchBar";
 import NewPartForm from "@/components/NewPartForm";
 import NewBundleForm from "@/components/NewBundleForm";
@@ -12,6 +12,8 @@ import NewPCForm from "@/components/NewPCForm";
 import PartCard from "@/components/PartCard";
 import BundleCard from "@/components/BundleCard";
 import MessagesPanel from "@/components/MessagesPanel";
+
+const STATUS_OPTIONS = ["All", "Unused", "Used"];
 
 export default function PartsPage() {
   const [parts, setParts] = useState([]);
@@ -22,6 +24,14 @@ export default function PartsPage() {
   const [activeForm, setActiveForm] = useState(null); // null | "part" | "bundle" | "pc"
   const [search, setSearch] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [marketplaceFilter, setMarketplaceFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -88,7 +98,7 @@ export default function PartsPage() {
     [bundles, partsByBundleId]
   );
 
-  // Merge standalone parts and bundles into one feed, newest first, then filter by search.
+  // Merge standalone parts and bundles into one feed, newest first, then filter by search + filters.
   const feed = useMemo(() => {
     const partItems = standaloneParts.map((p) => ({ type: "part", data: p, created_at: p.created_at }));
     const bundleItems = visibleBundles.map((b) => ({ type: "bundle", data: b, created_at: b.created_at }));
@@ -97,19 +107,30 @@ export default function PartsPage() {
     );
 
     const q = search.trim().toLowerCase();
-    if (!q) return combined;
 
     return combined.filter((item) => {
       if (item.type === "part") {
         const p = item.data;
+        if (categoryFilter !== "All" && p.category !== categoryFilter) return false;
+        if (marketplaceFilter !== "All" && p.marketplace !== marketplaceFilter) return false;
+        if (statusFilter === "Used" && !p.build_id) return false;
+        if (statusFilter === "Unused" && p.build_id) return false;
+        if (!q) return true;
         return (
           p.name.toLowerCase().includes(q) ||
           p.category.toLowerCase().includes(q) ||
           p.marketplace.toLowerCase().includes(q)
         );
       }
+
       const b = item.data;
       const bundleParts = partsByBundleId[b.id] || [];
+      if (categoryFilter !== "All" && !bundleParts.some((p) => p.category === categoryFilter))
+        return false;
+      if (marketplaceFilter !== "All" && b.marketplace !== marketplaceFilter) return false;
+      if (statusFilter === "Used" && !bundleParts.some((p) => p.build_id)) return false;
+      if (statusFilter === "Unused" && bundleParts.every((p) => p.build_id)) return false;
+      if (!q) return true;
       return (
         (b.label || "").toLowerCase().includes(q) ||
         b.marketplace.toLowerCase().includes(q) ||
@@ -119,7 +140,64 @@ export default function PartsPage() {
         )
       );
     });
-  }, [standaloneParts, visibleBundles, partsByBundleId, search]);
+  }, [standaloneParts, visibleBundles, partsByBundleId, search, categoryFilter, marketplaceFilter, statusFilter]);
+
+  const filtersActive = categoryFilter !== "All" || marketplaceFilter !== "All" || statusFilter !== "All";
+
+  function clearFilters() {
+    setCategoryFilter("All");
+    setMarketplaceFilter("All");
+    setStatusFilter("All");
+  }
+
+  // Only standalone part cards are selectable — bundles have their own
+  // delete flow since removing them cascades to their contained parts.
+  const selectableIds = useMemo(
+    () => feed.filter((item) => item.type === "part").map((item) => item.data.id),
+    [feed]
+  );
+
+  function toggleSelectMode() {
+    setSelectMode((on) => !on);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelectPart(part) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(part.id)) next.delete(part.id);
+      else next.add(part.id);
+      return next;
+    });
+  }
+
+  function selectAllVisible() {
+    setSelectedIds(new Set(selectableIds));
+  }
+
+  function deselectAll() {
+    setSelectedIds(new Set());
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (
+      !confirm(
+        `Delete ${selectedIds.size} selected part${selectedIds.size === 1 ? "" : "s"}? This can't be undone.`
+      )
+    )
+      return;
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    const { error } = await supabase.from("parts").delete().in("id", ids);
+    setBulkDeleting(false);
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setParts((prev) => prev.filter((p) => !selectedIds.has(p.id)));
+    setSelectedIds(new Set());
+  }
 
   async function handleSavePart(form, file, messageBody) {
     let image_url = null;
@@ -301,6 +379,17 @@ export default function PartsPage() {
             }
           />
           <button
+            onClick={toggleSelectMode}
+            className={`flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition ${
+              selectMode
+                ? "border-trace-500/50 bg-trace-500/10 text-trace-400"
+                : "border-graphite-600 bg-graphite-800 text-white hover:border-graphite-500"
+            }`}
+          >
+            {selectMode ? <CheckSquare size={16} /> : <Square size={16} />}
+            {selectMode ? "Selecting" : "Select"}
+          </button>
+          <button
             onClick={() => setActiveForm(activeForm === "pc" ? null : "pc")}
             className="flex shrink-0 items-center gap-2 rounded-lg border border-graphite-600 bg-graphite-800 px-4 py-2.5 text-sm font-semibold text-white transition hover:border-graphite-500"
           >
@@ -323,6 +412,87 @@ export default function PartsPage() {
           </button>
         </div>
       </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-graphite-700 bg-graphite-900/60 p-3">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-graphite-500">
+          <ListFilter size={14} />
+          Filter
+        </span>
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="rounded-lg border border-graphite-700 bg-graphite-800 px-2.5 py-1.5 text-xs text-white"
+        >
+          <option value="All">All categories</option>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          value={marketplaceFilter}
+          onChange={(e) => setMarketplaceFilter(e.target.value)}
+          className="rounded-lg border border-graphite-700 bg-graphite-800 px-2.5 py-1.5 text-xs text-white"
+        >
+          <option value="All">All marketplaces</option>
+          {MARKETPLACES.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-lg border border-graphite-700 bg-graphite-800 px-2.5 py-1.5 text-xs text-white"
+        >
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        {filtersActive && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs text-graphite-500 hover:text-signal-red"
+          >
+            <X size={13} />
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* Bulk selection bar */}
+      {selectMode && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-trace-500/30 bg-trace-500/5 p-3">
+          <span className="text-sm text-graphite-300">
+            {selectedIds.size} selected
+          </span>
+          <button
+            onClick={selectAllVisible}
+            className="text-xs font-medium text-trace-400 hover:underline"
+          >
+            Select all visible
+          </button>
+          <button
+            onClick={deselectAll}
+            className="text-xs font-medium text-graphite-500 hover:underline"
+          >
+            Deselect all
+          </button>
+          <button
+            onClick={handleBulkDelete}
+            disabled={selectedIds.size === 0 || bulkDeleting}
+            className="ml-auto flex items-center gap-1.5 rounded-lg bg-signal-red/15 px-3 py-1.5 text-xs font-semibold text-signal-red ring-1 ring-signal-red/40 transition hover:bg-signal-red/25 disabled:opacity-50"
+          >
+            <Trash2 size={13} />
+            {bulkDeleting ? "Deleting…" : `Delete selected`}
+          </button>
+        </div>
+      )}
 
       {activeForm === "part" && (
         <NewPartForm onCancel={() => setActiveForm(null)} onSave={handleSavePart} />
@@ -347,7 +517,7 @@ export default function PartsPage() {
           <p className="text-graphite-400">
             {visibleParts.length === 0 && visibleBundles.length === 0
               ? "No parts yet — click \u201cNew part\u201d to add your first one."
-              : "Nothing matches your search."}
+              : "Nothing matches your search or filters."}
           </p>
         </div>
       ) : (
@@ -359,6 +529,9 @@ export default function PartsPage() {
                 part={item.data}
                 buildName={item.data.build_id ? buildNameById[item.data.build_id] : null}
                 onDelete={handleDeletePart}
+                selectable={selectMode}
+                selected={selectedIds.has(item.data.id)}
+                onToggleSelect={toggleSelectPart}
               />
             ) : (
               <BundleCard
