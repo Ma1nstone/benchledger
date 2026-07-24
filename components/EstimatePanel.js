@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, Link2, Trash2, Wrench } from "lucide-react";
+import { Calculator, Link2, Sparkles, Trash2, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
 import { parseListingText, titleCase } from "@/lib/estimateParser";
@@ -12,18 +12,55 @@ export default function EstimatePanel() {
   const router = useRouter();
   const [raw, setRaw] = useState("");
   const [items, setItems] = useState([]);
+  const [analyzed, setAnalyzed] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const [buildName, setBuildName] = useState("");
   const [buildLink, setBuildLink] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  function priceItem(item) {
+    const range = estimateRange(item.text, item.category);
+    const suggested = range ? Math.round((range[0] + range[1]) / 2) : "";
+    return { ...item, range, price: suggested === "" ? "" : String(suggested) };
+  }
+
   function handleAnalyze() {
-    const parsed = parseListingText(raw).map((item) => {
-      const range = estimateRange(item.text, item.category);
-      const suggested = range ? Math.round((range[0] + range[1]) / 2) : "";
-      return { ...item, range, price: suggested === "" ? "" : String(suggested) };
-    });
-    setItems(parsed);
+    setErrorMsg("");
+    setItems(parseListingText(raw).map(priceItem));
+    setAnalyzed(true);
+  }
+
+  // Only asks the AI to look for categories the free parser didn't find at
+  // all — it fills gaps, it doesn't re-do or second-guess what's already there.
+  async function handleAIFillGaps() {
+    setAiLoading(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/parse-listing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: raw }),
+      });
+      const data = await res.json();
+      if (data?.error) throw new Error(data.error);
+
+      const existingCategories = new Set(items.map((it) => it.category));
+      const gaps = (Array.isArray(data) ? data : []).filter(
+        (it) => !existingCategories.has(it.category)
+      );
+
+      if (gaps.length === 0) {
+        setErrorMsg("AI didn't find anything the free parser missed.");
+        return;
+      }
+
+      setItems((prev) => [...prev, ...gaps.map(priceItem)]);
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   function updateItem(id, field, value) {
@@ -87,19 +124,35 @@ export default function EstimatePanel() {
         </label>
         <textarea
           value={raw}
-          onChange={(e) => setRaw(e.target.value)}
+          onChange={(e) => {
+            setRaw(e.target.value);
+            setAnalyzed(false);
+          }}
           rows={6}
           placeholder="Paste the full parts list / description here..."
           className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
         />
-        <button
-          onClick={handleAnalyze}
-          disabled={!raw.trim()}
-          className="mt-3 flex items-center gap-2 rounded-lg bg-trace-500 px-4 py-2 text-sm font-semibold text-graphite-950 transition hover:bg-trace-400 disabled:opacity-50"
-        >
-          <Calculator size={16} />
-          Analyze
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleAnalyze}
+            disabled={!raw.trim()}
+            className="flex items-center gap-2 rounded-lg bg-trace-500 px-4 py-2 text-sm font-semibold text-graphite-950 transition hover:bg-trace-400 disabled:opacity-50"
+          >
+            <Calculator size={16} />
+            Analyze
+          </button>
+
+          {analyzed && (
+            <button
+              onClick={handleAIFillGaps}
+              disabled={aiLoading}
+              className="flex items-center gap-2 rounded-lg border border-trace-500/40 bg-trace-500/10 px-4 py-2 text-sm font-semibold text-trace-400 transition hover:bg-trace-500/20 disabled:opacity-50"
+            >
+              <Sparkles size={16} />
+              {aiLoading ? "Filling gaps…" : "Fill gaps with AI"}
+            </button>
+          )}
+        </div>
       </div>
 
       {items.length > 0 && (
