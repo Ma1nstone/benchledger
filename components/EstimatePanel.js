@@ -2,39 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, Link2, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Link2, Sparkles, Trash2, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
-import { parseListingText, titleCase } from "@/lib/estimateParser";
+import { titleCase } from "@/lib/estimateParser";
 import { estimateRange } from "@/lib/priceReference";
 
 export default function EstimatePanel() {
   const router = useRouter();
   const [raw, setRaw] = useState("");
   const [items, setItems] = useState([]);
-  const [analyzed, setAnalyzed] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [buildName, setBuildName] = useState("");
   const [buildLink, setBuildLink] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  function priceItem(item) {
-    const range = estimateRange(item.text, item.category);
-    const suggested = range ? Math.round((range[0] + range[1]) / 2) : "";
-    return { ...item, range, price: suggested === "" ? "" : String(suggested) };
-  }
-
-  function handleAnalyze() {
-    setErrorMsg("");
-    setItems(parseListingText(raw).map(priceItem));
-    setAnalyzed(true);
-  }
-
-  // Only asks the AI to look for categories the free parser didn't find at
-  // all — it fills gaps, it doesn't re-do or second-guess what's already there.
-  async function handleAIFillGaps() {
-    setAiLoading(true);
+  async function handleAnalyze() {
+    setAnalyzing(true);
     setErrorMsg("");
     try {
       const res = await fetch("/api/parse-listing", {
@@ -45,21 +30,31 @@ export default function EstimatePanel() {
       const data = await res.json();
       if (data?.error) throw new Error(data.error);
 
-      const existingCategories = new Set(items.map((it) => it.category));
-      const gaps = (Array.isArray(data) ? data : []).filter(
-        (it) => !existingCategories.has(it.category)
-      );
+      const shaped = (Array.isArray(data) ? data : []).map((it, i) => {
+        const aiPriced = it.price != null;
+        // If the AI couldn't find a price, fall back to the built-in
+        // ballpark table rather than leaving it blank.
+        const range = !aiPriced ? estimateRange(it.text, it.category) : null;
+        const price = aiPriced
+          ? String(it.price)
+          : range
+          ? String(Math.round((range[0] + range[1]) / 2))
+          : "";
+        return {
+          id: `item-${i}-${Date.now()}`,
+          text: it.text,
+          category: it.category,
+          price,
+          range,
+          aiPriced,
+        };
+      });
 
-      if (gaps.length === 0) {
-        setErrorMsg("AI didn't find anything the free parser missed.");
-        return;
-      }
-
-      setItems((prev) => [...prev, ...gaps.map(priceItem)]);
+      setItems(shaped);
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
-      setAiLoading(false);
+      setAnalyzing(false);
     }
   }
 
@@ -124,43 +119,32 @@ export default function EstimatePanel() {
         </label>
         <textarea
           value={raw}
-          onChange={(e) => {
-            setRaw(e.target.value);
-            setAnalyzed(false);
-          }}
+          onChange={(e) => setRaw(e.target.value)}
           rows={6}
           placeholder="Paste the full parts list / description here..."
           className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
         />
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleAnalyze}
-            disabled={!raw.trim()}
-            className="flex items-center gap-2 rounded-lg bg-trace-500 px-4 py-2 text-sm font-semibold text-graphite-950 transition hover:bg-trace-400 disabled:opacity-50"
-          >
-            <Calculator size={16} />
-            Analyze
-          </button>
-
-          {analyzed && (
-            <button
-              onClick={handleAIFillGaps}
-              disabled={aiLoading}
-              className="flex items-center gap-2 rounded-lg border border-trace-500/40 bg-trace-500/10 px-4 py-2 text-sm font-semibold text-trace-400 transition hover:bg-trace-500/20 disabled:opacity-50"
-            >
-              <Sparkles size={16} />
-              {aiLoading ? "Filling gaps…" : "Fill gaps with AI"}
-            </button>
-          )}
-        </div>
+        <button
+          onClick={handleAnalyze}
+          disabled={!raw.trim() || analyzing}
+          className="mt-3 flex items-center gap-2 rounded-lg bg-trace-500 px-4 py-2 text-sm font-semibold text-graphite-950 transition hover:bg-trace-400 disabled:opacity-50"
+        >
+          <Sparkles size={16} />
+          {analyzing ? "Analysing…" : "Analyse"}
+        </button>
+        {errorMsg && !items.length && (
+          <p className="mt-3 rounded-lg border border-signal-red/40 bg-signal-red/10 px-3 py-2 text-xs text-signal-red">
+            {errorMsg}
+          </p>
+        )}
       </div>
 
       {items.length > 0 && (
         <div className="rounded-xl border border-graphite-700 bg-graphite-900 p-4">
           <p className="mb-3 text-xs text-graphite-500">
-            Detected {items.length} spec line{items.length === 1 ? "" : "s"}. Prices are
-            pre-filled from built-in ballpark estimates where recognised — edit any of them if
-            you know better.
+            Detected {items.length} part{items.length === 1 ? "" : "s"}. Prices marked{" "}
+            <span className="text-trace-400">AI estimate</span> come from a live search — edit any
+            of them if you know better.
           </p>
           <div className="flex flex-col gap-2">
             {items.map((item) => (
@@ -182,11 +166,13 @@ export default function EstimatePanel() {
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-graphite-200">{titleCase(item.text)}</p>
-                  {item.range && (
+                  {item.aiPriced ? (
+                    <p className="text-[11px] text-trace-400">AI estimate</p>
+                  ) : item.range ? (
                     <p className="text-[11px] text-graphite-500">
                       Ballpark: {formatPrice(item.range[0])} – {formatPrice(item.range[1])}
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 <input
