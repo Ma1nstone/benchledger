@@ -17,6 +17,10 @@ Rules:
 - If a part doesn't fit any category, use "Other".
 - If nothing is found, return [].`;
 
+// gemini-2.5-flash-lite has been retired — gemini-3.5-flash-lite is the
+// current lightweight production model as of mid-2026.
+const MODEL = "gemini-3.5-flash-lite";
+
 export async function POST(req) {
   try {
     const { text } = await req.json();
@@ -26,16 +30,19 @@ export async function POST(req) {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return Response.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 });
+      return Response.json({ error: "GEMINI_API_KEY not configured on the server" }, { status: 500 });
     }
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ role: "user", parts: [{ text }] }],
           generationConfig: {
             temperature: 0,
@@ -47,8 +54,11 @@ export async function POST(req) {
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error("Gemini API error:", errText);
-      return Response.json({ error: "AI parse failed" }, { status: 502 });
+      console.error("Gemini API error:", res.status, errText);
+      return Response.json(
+        { error: `Gemini API error (${res.status}): ${errText.slice(0, 300)}` },
+        { status: 502 }
+      );
     }
 
     const data = await res.json();
@@ -58,11 +68,12 @@ export async function POST(req) {
     try {
       items = JSON.parse(raw);
     } catch {
-      items = [];
+      console.error("Gemini returned non-JSON text:", raw);
+      return Response.json({ error: "Gemini returned unparseable output" }, { status: 502 });
     }
+
     if (!Array.isArray(items)) items = [];
 
-    // Map into the same {id, text, category} shape estimateParser.js returns.
     const shaped = items
       .filter((it) => it && typeof it.text === "string" && CATEGORIES.includes(it.category))
       .map((it, i) => ({
@@ -74,6 +85,6 @@ export async function POST(req) {
     return Response.json(shaped);
   } catch (err) {
     console.error("parse-listing route error:", err);
-    return Response.json({ error: "Unexpected error" }, { status: 500 });
+    return Response.json({ error: `Unexpected error: ${err.message}` }, { status: 500 });
   }
 }
