@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Link2, Sparkles, Tag, Trash2, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
 import { titleCase } from "@/lib/estimateParser";
@@ -15,6 +15,7 @@ export default function EstimatePanel() {
   const [analyzing, setAnalyzing] = useState(false);
   const [buildName, setBuildName] = useState("");
   const [buildLink, setBuildLink] = useState("");
+  const [listingPrice, setListingPrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -84,6 +85,7 @@ export default function EstimatePanel() {
         .insert({
           name: buildName.trim() || "Estimated Build",
           link: buildLink.trim() || null,
+          listing_price: listingPrice === "" ? null : Number(listingPrice),
           offer_price: offerPrice,
           sell_price: sellPrice,
         })
@@ -120,18 +122,33 @@ export default function EstimatePanel() {
         <textarea
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
-          rows={6}
+          rows={16}
           placeholder="Paste the full parts list / description here..."
-          className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+          className="min-h-[360px] w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
         />
-        <button
-          onClick={handleAnalyze}
-          disabled={!raw.trim() || analyzing}
-          className="mt-3 flex items-center gap-2 rounded-lg bg-trace-500 px-4 py-2 text-sm font-semibold text-graphite-950 transition hover:bg-trace-400 disabled:opacity-50"
-        >
-          <Sparkles size={16} />
-          {analyzing ? "Analysing…" : "Analyse"}
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleAnalyze}
+            disabled={!raw.trim() || analyzing}
+            className="flex items-center gap-2 rounded-lg bg-trace-500 px-4 py-2 text-sm font-semibold text-graphite-950 transition hover:bg-trace-400 disabled:opacity-50"
+          >
+            <Sparkles size={16} />
+            {analyzing ? "Analyzing…" : "Analyze"}
+          </button>
+
+          <div className="flex flex-1 min-w-[200px] items-center gap-2 rounded-lg border border-graphite-700 bg-graphite-800 px-3">
+            <Tag size={14} className="shrink-0 text-graphite-500" />
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={listingPrice}
+              onChange={(e) => setListingPrice(e.target.value)}
+              placeholder="Listing price — what the seller is asking (optional)"
+              className="w-full bg-transparent py-2 text-sm text-white placeholder:text-graphite-500 focus:outline-none"
+            />
+          </div>
+        </div>
         {errorMsg && !items.length && (
           <p className="mt-3 rounded-lg border border-signal-red/40 bg-signal-red/10 px-3 py-2 text-xs text-signal-red">
             {errorMsg}
@@ -143,8 +160,8 @@ export default function EstimatePanel() {
         <div className="rounded-xl border border-graphite-700 bg-graphite-900 p-4">
           <p className="mb-3 text-xs text-graphite-500">
             Detected {items.length} part{items.length === 1 ? "" : "s"}. Prices marked{" "}
-            <span className="text-trace-400">AI estimate</span> come from a live search — edit any
-            of them if you know better.
+            <span className="text-trace-400">AI estimate</span> come from the model's own
+            knowledge — edit any of them if you know better.
           </p>
           <div className="flex flex-col gap-2">
             {items.map((item) => (
@@ -196,7 +213,15 @@ export default function EstimatePanel() {
             ))}
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-graphite-700 pt-4 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-graphite-700 pt-4 sm:grid-cols-4">
+            {listingPrice !== "" && (
+              <div className="rounded-lg bg-graphite-800/60 p-3 text-center">
+                <p className="text-xs text-graphite-500">Listing price</p>
+                <p className="mt-1 font-mono text-lg font-bold text-white">
+                  {formatPrice(Number(listingPrice))}
+                </p>
+              </div>
+            )}
             <div className="rounded-lg bg-graphite-800/60 p-3 text-center">
               <p className="text-xs text-graphite-500">Estimated parts total</p>
               <p className="mt-1 font-mono text-lg font-bold text-white">{formatPrice(total)}</p>

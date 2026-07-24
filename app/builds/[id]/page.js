@@ -27,6 +27,7 @@ export default function BuildDetailPage() {
   const [saving, setSaving] = useState(false);
   const [soldPrice, setSoldPrice] = useState("");
   const [markingSold, setMarkingSold] = useState(false);
+  const [listingPrice, setListingPrice] = useState("");
   const [offerPrice, setOfferPrice] = useState("");
   const [sellPrice, setSellPrice] = useState("");
 
@@ -45,6 +46,7 @@ export default function BuildDetailPage() {
     setBuild(buildData);
     setName(buildData.name);
     setLink(buildData.link || "");
+    setListingPrice(buildData.listing_price != null ? String(buildData.listing_price) : "");
     setOfferPrice(buildData.offer_price != null ? String(buildData.offer_price) : "");
     setSellPrice(buildData.sell_price != null ? String(buildData.sell_price) : "");
     setAllParts(partsData || []);
@@ -84,6 +86,17 @@ export default function BuildDetailPage() {
     setSaving(false);
     if (error) setErrorMsg(error.message);
     else setBuild((b) => ({ ...b, link: value }));
+  }
+
+  async function saveListingPrice() {
+    if (!build) return;
+    const value = listingPrice === "" ? null : Number(listingPrice);
+    if (value === build.listing_price) return;
+    setSaving(true);
+    const { error } = await supabase.from("builds").update({ listing_price: value }).eq("id", id);
+    setSaving(false);
+    if (error) setErrorMsg(error.message);
+    else setBuild((b) => ({ ...b, listing_price: value }));
   }
 
   async function saveOfferPrice() {
@@ -379,15 +392,30 @@ export default function BuildDetailPage() {
       </div>
 
       {/* Pricing: total is always the sum of parts below and can't be typed
-          into directly. Offer price is editable on every build. Sell price
-          only appears on builds that came from the Estimate tool. */}
-      <div className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-graphite-700 bg-graphite-900 p-4 sm:grid-cols-3">
+          into directly. Listing price and offer price are editable on every
+          build. Sell price only appears on builds that came from the
+          Estimate tool. */}
+      <div className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-graphite-700 bg-graphite-900 p-4 sm:grid-cols-4">
         <div className="rounded-lg bg-graphite-800/60 p-3">
           <p className="text-xs text-graphite-500">Estimate (sum of parts)</p>
           <p className="mt-1 font-mono text-lg font-bold text-white">{formatPrice(total)}</p>
           <p className="mt-1 text-[11px] text-graphite-600">
             Always the total of the parts below — edit them to change this.
           </p>
+        </div>
+
+        <div className="rounded-lg bg-graphite-800/60 p-3">
+          <label className="text-xs text-graphite-500">Listing price</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={listingPrice}
+            onChange={(e) => setListingPrice(e.target.value)}
+            onBlur={saveListingPrice}
+            placeholder="£ asking"
+            className="mt-1 w-full rounded-lg border border-graphite-700 bg-graphite-900 px-2 py-1.5 font-mono text-lg font-bold text-white placeholder:text-graphite-600"
+          />
         </div>
 
         <div className="rounded-lg bg-signal-red/10 p-3 ring-1 ring-signal-red/30">
