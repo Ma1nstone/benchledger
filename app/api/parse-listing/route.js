@@ -1,15 +1,17 @@
 // app/api/parse-listing/route.js
-// Uses Gemini + Google Search grounding to both extract PC parts from a
-// pasted listing AND look up a realistic current secondhand price for each.
+// Uses Gemini to extract PC parts from a pasted listing AND estimate a
+// realistic current secondhand price for each, from the model's own
+// knowledge (no Search grounding — that hits a separate, much stricter
+// quota on free-tier keys and was causing 429s almost immediately).
 
 const CATEGORIES = [
   "CPU", "GPU", "RAM", "Storage", "PSU",
   "Motherboard", "Case", "Cooler", "Monitor", "Other",
 ];
 
-const SYSTEM_PROMPT = `You are a PC hardware listing analyzer with access to Google Search for current pricing.
+const SYSTEM_PROMPT = `You are a PC hardware listing analyzer.
 
-Read the secondhand PC/parts listing text below and extract every actual hardware component mentioned. Then use Google Search to find a realistic CURRENT UK secondhand/used price (eBay sold listings, Facebook Marketplace — not retail/new price) for each one, and give your best single-number estimate in GBP.
+Read the secondhand PC/parts listing text below and extract every actual hardware component mentioned. For each one, give your best estimate of a realistic CURRENT UK secondhand/used price in GBP (eBay/Facebook Marketplace sold-listing territory, not retail/new price) based on your knowledge of the part.
 
 CATEGORY RULES — read carefully, these are commonly confused:
 - RAM: memory capacity — normally 4/8/16/32/64GB, described with the words "RAM", "memory", or "DDR3/DDR4/DDR5". A number of GB is ONLY RAM if the text actually calls it RAM/memory/DDR.
@@ -21,22 +23,14 @@ CATEGORY RULES — read carefully, these are commonly confused:
 - If the listing mentions several identical items (e.g. "2 monitors" or "comes with 2 monitors"), create ONE item describing the quantity — don't invent duplicate entries.
 - Ignore filler, greetings, and sales pitch language — only real hardware specs.
 
-Respond with ONLY a raw JSON array — no markdown code fences, no commentary, no text before or after it. Each item:
-{"text": "<the part as named in the listing>", "category": "<${CATEGORIES.join("|")}>", "price": <your researched GBP price estimate as a number, or null if you genuinely can't find one>}
+Respond with ONLY a JSON array. Each item:
+{"text": "<the part as named in the listing>", "category": "<${CATEGORIES.join("|")}>", "price": <your best GBP price estimate as a number, or null if you genuinely can't estimate>}
 
 If nothing is found, respond with exactly: []`;
 
 // gemini-2.5-flash-lite has been retired — gemini-3.5-flash-lite is the
 // current lightweight production model as of mid-2026.
 const MODEL = "gemini-3.5-flash-lite";
-
-function extractJsonArray(raw) {
-  const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
-  const start = cleaned.indexOf("[");
-  const end = cleaned.lastIndexOf("]");
-  const jsonStr = start !== -1 && end !== -1 ? cleaned.slice(start, end + 1) : cleaned;
-  return JSON.parse(jsonStr);
-}
 
 export async function POST(req) {
   try {
@@ -61,11 +55,9 @@ export async function POST(req) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ role: "user", parts: [{ text }] }],
-          // Grounds the price lookups in real, current search results
-          // instead of the model guessing from training data.
-          tools: [{ google_search: {} }],
           generationConfig: {
             temperature: 0,
+            responseMimeType: "application/json",
           },
         }),
       }
@@ -81,14 +73,13 @@ export async function POST(req) {
     }
 
     const data = await res.json();
-    const parts = data?.candidates?.[0]?.content?.parts ?? [];
-    const raw = parts.map((p) => p.text || "").join("");
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
 
     let items;
     try {
-      items = extractJsonArray(raw);
+      items = JSON.parse(raw);
     } catch {
-      console.error("Gemini returned unparseable output:", raw);
+      console.error("Gemini returned non-JSON text:", raw);
       return Response.json({ error: "Gemini returned unparseable output" }, { status: 502 });
     }
 
