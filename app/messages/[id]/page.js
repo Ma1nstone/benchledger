@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft, Lock, User } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
 import { getTopicConfig } from "@/lib/messageTopics";
@@ -60,6 +60,7 @@ export default function MessageDetailPage() {
 
   const topic = getTopicConfig(message.topic);
   const creatorName = message.creator?.name || message.creator?.email || "Someone";
+  const isPrivate = (message.recipient_ids || []).length > 0;
 
   return (
     <div className="max-w-2xl">
@@ -72,11 +73,19 @@ export default function MessageDetailPage() {
       </Link>
 
       <div className="rounded-xl border border-graphite-700 bg-graphite-900 p-6">
-        <span
-          className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ${topic.bg} ${topic.text} ${topic.ring}`}
-        >
-          {topic.label}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ${topic.bg} ${topic.text} ${topic.ring}`}
+          >
+            {topic.label}
+          </span>
+          {isPrivate && (
+            <span className="flex items-center gap-1 rounded-full bg-graphite-800 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-graphite-400 ring-1 ring-graphite-700">
+              <Lock size={10} />
+              Private
+            </span>
+          )}
+        </div>
 
         <h1 className="mt-3 font-display text-xl font-bold text-white">{message.title}</h1>
 
