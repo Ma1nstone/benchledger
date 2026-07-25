@@ -1,5 +1,6 @@
 import "./globals.css";
 import Nav from "@/components/Nav";
+import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata = {
   title: "PC Scout",
@@ -39,6 +40,18 @@ export default function RootLayout({ children }) {
       <body className="min-h-screen font-sans antialiased">
         <Nav />
         <main className="mx-auto max-w-[1600px] px-6 py-8 sm:px-10">{children}</main>
+      </body>
+    </html>
+  );
+}
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <AuthProvider>
+          <Nav />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
