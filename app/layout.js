@@ -38,19 +38,9 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body className="min-h-screen font-sans antialiased">
-        <Nav />
-        <main className="mx-auto max-w-[1600px] px-6 py-8 sm:px-10">{children}</main>
-      </body>
-    </html>
-  );
-}
-export default function RootLayout({ children }) {
-  return (
-    <html lang="en">
-      <body>
         <AuthProvider>
           <Nav />
-          {children}
+          <main className="mx-auto max-w-[1600px] px-6 py-8 sm:px-10">{children}</main>
         </AuthProvider>
       </body>
     </html>
