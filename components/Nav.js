@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Cpu, Wrench, Tag } from "lucide-react";
+import { Calculator, Cpu, Wrench, Tag } from "lucide-react";
 import UserMenu from "@/components/UserMenu";
 
 const LINKS = [
   { href: "/parts", label: "Parts", icon: Cpu },
   { href: "/builds", label: "Builds", icon: Wrench },
   { href: "/sales", label: "Sales", icon: Tag },
+  { href: "/estimate", label: "Estimate", icon: Calculator },
 ];
 
 export default function Nav() {
@@ -22,7 +23,7 @@ export default function Nav() {
             <Cpu size={18} />
           </span>
           <span className="font-display text-lg font-semibold tracking-tight text-white">
-            PC<span className="text-trace-400">Scout</span>
+            PC Scout
           </span>
         </Link>
 

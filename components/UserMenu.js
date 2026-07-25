@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut, User } from "lucide-react";
+import Link from "next/link";
+import { LogOut, Settings, User } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function UserMenu() {
@@ -45,6 +46,14 @@ export default function UserMenu() {
               Admin
             </p>
           )}
+          <Link
+            href="/settings"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-graphite-300 hover:bg-graphite-800 hover:text-white"
+          >
+            <Settings size={14} />
+            Settings
+          </Link>
           <button
             onClick={() => {
               setOpen(false);
