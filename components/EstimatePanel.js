@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Sparkles, Tag, Trash2, Wrench } from "lucide-react";
+import { Clipboard, Link2, Sparkles, Tag, Trash2, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
 import { titleCase } from "@/lib/estimateParser";
@@ -18,6 +18,15 @@ export default function EstimatePanel() {
   const [listingPrice, setListingPrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  async function handlePasteFromClipboard() {
+    try {
+      const clip = await navigator.clipboard.readText();
+      if (clip) setRaw(clip);
+    } catch {
+      setErrorMsg("Couldn't read the clipboard — your browser may need permission first.");
+    }
+  }
 
   async function handleAnalyze() {
     setAnalyzing(true);
@@ -134,6 +143,14 @@ export default function EstimatePanel() {
           >
             <Sparkles size={16} />
             {analyzing ? "Analyzing…" : "Analyze"}
+          </button>
+
+          <button
+            onClick={handlePasteFromClipboard}
+            className="flex items-center gap-2 rounded-lg border border-graphite-600 bg-graphite-800 px-4 py-2 text-sm font-semibold text-white transition hover:border-graphite-500"
+          >
+            <Clipboard size={16} />
+            Paste from clipboard
           </button>
 
           <div className="flex flex-1 min-w-[200px] items-center gap-2 rounded-lg border border-graphite-700 bg-graphite-800 px-3">

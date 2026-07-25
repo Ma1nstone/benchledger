@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, MonitorSmartphone, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2 } from "lucide-react";
 import { ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 
 export default function BuildCard({ build, parts, onDelete }) {
@@ -60,6 +60,20 @@ export default function BuildCard({ build, parts, onDelete }) {
           }`}
           title={complete ? "Build complete" : "Missing essential parts"}
         />
+
+        {build.link && (
+          <a
+            href={build.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="shrink-0 rounded-lg p-2 text-graphite-500 hover:bg-graphite-800 hover:text-trace-400"
+            aria-label="Open listing link"
+            title="Open listing link"
+          >
+            <ExternalLink size={16} />
+          </a>
+        )}
 
         <Link
           href={`/builds/${build.id}`}
