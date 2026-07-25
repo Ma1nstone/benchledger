@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
 import { CATEGORIES, ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 import PartPicker from "@/components/PartPicker";
+import BuildAssistant from "@/components/BuildAssistant";
 
 const OPTIONAL_CATEGORIES = CATEGORIES.filter(
   (c) => !ESSENTIAL_CATEGORIES.includes(c)
@@ -477,6 +478,7 @@ export default function BuildDetailPage() {
           onClose={() => setPickerCategory(null)}
         />
       )}
+     <BuildAssistant parts={assignedParts} total={total} />
     </div>
   );
 }
