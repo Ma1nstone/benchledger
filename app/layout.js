@@ -13,6 +13,12 @@ export const metadata = {
     shortcut: "/favicon.ico?v=2",
     apple: "/favicon.svg?v=2",
   },
+  // This is what actually renders <meta name="google-site-verification"
+  // content="..." /> into the page <head> — Next.js generates the tag
+  // from this field automatically, no manual <meta> needed anywhere.
+  verification: {
+    google: "G_UQJv4-XiQh8IozCGr71392gQydSztZYtYFkV3spZo",
+  },
 };
 
 export default function RootLayout({ children }) {
