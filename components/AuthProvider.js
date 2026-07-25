@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 const AuthContext = createContext({ user: null, profile: null, loading: true });
@@ -10,10 +10,10 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function loadProfile(userId) {
+  const loadProfile = useCallback(async (userId) => {
     const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
     setProfile(data || null);
-  }
+  }, []);
 
   useEffect(() => {
     // Supabase persists the session in localStorage automatically, so this
@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
     });
 
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [loadProfile]);
 
   async function signInWithGoogle() {
     await supabase.auth.signInWithOAuth({
@@ -44,8 +44,16 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   }
 
+  // Re-fetches the profile row — call this after editing something like the
+  // display name so the nav/settings reflect it immediately.
+  async function refreshProfile() {
+    if (user) await loadProfile(user.id);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider
+      value={{ user, profile, loading, signInWithGoogle, signOut, refreshProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );
