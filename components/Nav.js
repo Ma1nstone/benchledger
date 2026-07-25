@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calculator, Cpu, Wrench, Tag } from "lucide-react";
+import { Calculator, Cpu, MessageSquare, Wrench, Tag } from "lucide-react";
 import UserMenu from "@/components/UserMenu";
 
 const LINKS = [
@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/builds", label: "Builds", icon: Wrench },
   { href: "/sales", label: "Sales", icon: Tag },
   { href: "/estimate", label: "Estimate", icon: Calculator },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
 ];
 
 export default function Nav() {
