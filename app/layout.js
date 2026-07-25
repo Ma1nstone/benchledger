@@ -2,7 +2,7 @@ import "./globals.css";
 import Nav from "@/components/Nav";
 
 export const metadata = {
-  title: "BenchLedger — Parts, Builds & Sales",
+  title: "PC Scout",
   description: "Track PC parts inventory, assemble builds, and manage sales.",
   icons: {
     icon: [

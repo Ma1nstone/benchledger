@@ -22,7 +22,7 @@ export default function Nav() {
             <Cpu size={18} />
           </span>
           <span className="font-display text-lg font-semibold tracking-tight text-white">
-            Bench<span className="text-trace-400">Ledger</span>
+            PC<span className="text-trace-400">Scout</span>
           </span>
         </Link>
 
