@@ -11,7 +11,6 @@ import NewBundleForm from "@/components/NewBundleForm";
 import NewPCForm from "@/components/NewPCForm";
 import PartCard from "@/components/PartCard";
 import BundleCard from "@/components/BundleCard";
-import MessagesPanel from "@/components/MessagesPanel";
 
 const STATUS_OPTIONS = ["All", "Unused", "Used"];
 
@@ -19,7 +18,6 @@ export default function PartsPage() {
   const [parts, setParts] = useState([]);
   const [bundles, setBundles] = useState([]);
   const [builds, setBuilds] = useState([]);
-  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeForm, setActiveForm] = useState(null); // null | "part" | "bundle" | "pc"
   const [search, setSearch] = useState("");
@@ -39,19 +37,16 @@ export default function PartsPage() {
       { data: partsData, error: partsError },
       { data: bundlesData, error: bundlesError },
       { data: buildsData },
-      { data: messagesData },
     ] = await Promise.all([
       supabase.from("parts").select("*").order("created_at", { ascending: false }),
       supabase.from("bundles").select("*").order("created_at", { ascending: false }),
       supabase.from("builds").select("id, name, sold"),
-      supabase.from("messages").select("*").order("created_at", { ascending: false }),
     ]);
     if (partsError) setErrorMsg(partsError.message);
     if (bundlesError) setErrorMsg(bundlesError.message);
     setParts(partsData || []);
     setBundles(bundlesData || []);
     setBuilds(buildsData || []);
-    setMessages(messagesData || []);
     setLoading(false);
   }
 
@@ -199,7 +194,7 @@ export default function PartsPage() {
     setSelectedIds(new Set());
   }
 
-  async function handleSavePart(form, file, messageBody) {
+  async function handleSavePart(form, file) {
     let image_url = null;
     if (file) {
       image_url = await uploadImage(file, "parts");
@@ -220,16 +215,6 @@ export default function PartsPage() {
 
     if (error) throw error;
     setParts((prev) => [data, ...prev]);
-
-    if (messageBody) {
-      const { data: message, error: messageError } = await supabase
-        .from("messages")
-        .insert({ part_id: data.id, body: messageBody })
-        .select()
-        .single();
-      if (!messageError) setMessages((prev) => [message, ...prev]);
-    }
-
     setActiveForm(null);
   }
 
@@ -368,15 +353,6 @@ export default function PartsPage() {
             onChange={setSearch}
             placeholder="Search parts…"
             className="flex-1 lg:max-w-md"
-          />
-          <MessagesPanel
-            messages={messages}
-            parts={parts}
-            onMarkedSeen={(ids) =>
-              setMessages((prev) =>
-                prev.map((m) => (ids.includes(m.id) ? { ...m, seen: true } : m))
-              )
-            }
           />
           <button
             onClick={toggleSelectMode}
