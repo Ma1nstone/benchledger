@@ -2,6 +2,7 @@ import "./globals.css";
 import Nav from "@/components/Nav";
 import { AuthProvider } from "@/components/AuthProvider";
 import { NotificationsProvider } from "@/components/NotificationsProvider";
+import AuthGate from "@/components/AuthGate";
 
 export const metadata = {
   title: "PC Scout",
@@ -45,7 +46,9 @@ export default function RootLayout({ children }) {
         <AuthProvider>
           <NotificationsProvider>
             <Nav />
-            <main className="mx-auto max-w-[1600px] px-6 py-8 sm:px-10">{children}</main>
+            <main className="mx-auto max-w-[1600px] px-6 py-8 sm:px-10">
+              <AuthGate>{children}</AuthGate>
+            </main>
           </NotificationsProvider>
         </AuthProvider>
       </body>

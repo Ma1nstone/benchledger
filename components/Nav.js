@@ -25,7 +25,7 @@ export default function Nav() {
   return (
     <header className="sticky top-0 z-40 border-b border-graphite-700 bg-graphite-950/90 backdrop-blur">
       <div className="mx-auto flex max-w-[1600px] items-center justify-between px-6 py-4 sm:px-10">
-        <Link href="/parts" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-md bg-trace-500/10 text-trace-400 ring-1 ring-trace-500/30">
             <Cpu size={18} />
           </span>
@@ -50,7 +50,7 @@ export default function Nav() {
                 <Icon size={15} />
                 {label}
                 {href === "/messages" && unreadCount > 0 && (
-                  <span className="grid h-4 min-w-[16px] place-items-center rounded-full bg-signal-red px-1 text-[10px] font-bold text-white">
+                  <span className="grid h-4 min-w-[16px] shrink-0 place-items-center rounded-full bg-signal-red px-1 text-[10px] font-bold leading-none text-white">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}

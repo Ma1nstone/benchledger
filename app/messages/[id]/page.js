@@ -39,9 +39,6 @@ export default function MessageDetailPage() {
     setMessage(data);
     setLoading(false);
 
-    // Mark as read for whoever's viewing it (not the creator — they never
-    // got a notification row for their own message). Goes through the
-    // shared notifications context so the nav badge updates immediately.
     if (user && data.creator_id !== user.id) {
       await markMessageRead(id);
     }
@@ -99,6 +96,8 @@ export default function MessageDetailPage() {
   const isMessageSeller = message.topic === "message_seller";
   const isShareBuild = message.topic === "share_build";
   const isOwner = user && message.creator_id === user.id;
+  const isRecipient = user && (message.recipient_ids || []).includes(user.id);
+  const canInteract = isOwner || isRecipient;
 
   const hasBuildAccess =
     message.linked_build &&
@@ -156,8 +155,8 @@ export default function MessageDetailPage() {
         )}
 
         {isMessageSeller && (
-          <div className="mt-5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+          <div className="mt-5 rounded-lg border border-blue-500/40 bg-blue-500/10 p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-300">
               Listing details
             </p>
             <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm text-graphite-300 sm:grid-cols-2">
@@ -195,7 +194,7 @@ export default function MessageDetailPage() {
         {isMessageSeller && (
           <MessageSellerTimeline
             message={message}
-            isOwner={isOwner}
+            canInteract={canInteract}
             onUpdate={handleNegotiationUpdate}
           />
         )}

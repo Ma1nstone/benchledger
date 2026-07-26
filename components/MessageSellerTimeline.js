@@ -49,8 +49,10 @@ function StatusBadge({ status }) {
 
 // Renders the negotiation as a permanent, append-only history — every past
 // entry stays visible with its final status, and only the most recent
-// ("live") entry ever gets action buttons.
-export default function MessageSellerTimeline({ message, isOwner, onUpdate }) {
+// ("live") entry ever gets action buttons. canInteract covers both the
+// message's creator AND anyone it was privately sent to — either side of
+// the negotiation can advance it.
+export default function MessageSellerTimeline({ message, canInteract, onUpdate }) {
   const negotiation = message.metadata?.negotiation || [];
   const counterOfferAmount = message.metadata?.counter_offer;
 
@@ -90,7 +92,7 @@ export default function MessageSellerTimeline({ message, isOwner, onUpdate }) {
       <div className="flex flex-col gap-3">
         {negotiation.map((entry, i) => {
           const isLast = i === negotiation.length - 1;
-          const canAct = isOwner && isLast && entry.status === "pending";
+          const canAct = canInteract && isLast && entry.status === "pending";
 
           return (
             <div
