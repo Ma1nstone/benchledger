@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronDown, Tag, Trash2, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/constants";
-import { ChevronDown, Tag, Trash2, RotateCcw } from "lucide-react";
 
 export default function SalesPage() {
   const [builds, setBuilds] = useState([]);
@@ -23,6 +23,7 @@ export default function SalesPage() {
         .from("builds")
         .select("*")
         .eq("sold", true)
+        .is("deleted_at", null)
         .order("sold_at", { ascending: false }),
       supabase.from("parts").select("id, build_id, name, category, price"),
     ]);
@@ -47,13 +48,29 @@ export default function SalesPage() {
       )
     )
       return;
-    const { error } = await supabase.from("builds").delete().eq("id", build.id);
+
+    const { error: partsError } = await supabase
+      .from("parts")
+      .update({ build_id: null })
+      .eq("build_id", build.id);
+    if (partsError) {
+      setErrorMsg(partsError.message);
+      return;
+    }
+
+    // Soft delete: mark it deleted rather than removing the row, so an
+    // admin can still see and restore it later.
+    const { error } = await supabase
+      .from("builds")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", build.id);
     if (error) {
       setErrorMsg(error.message);
       return;
     }
     setBuilds((prev) => prev.filter((b) => b.id !== build.id));
   }
+
   async function handleRestore(e, build) {
     e.stopPropagation();
     if (!confirm(`Move "${build.name}" back to Builds? It'll be marked as unsold.`)) return;
@@ -67,7 +84,6 @@ export default function SalesPage() {
     }
     setBuilds((prev) => prev.filter((b) => b.id !== build.id));
   }
-
 
   return (
     <div>
@@ -157,6 +173,7 @@ export default function SalesPage() {
                       {formatPrice(profit)}
                     </p>
                   </div>
+
                   <button
                     onClick={(e) => handleRestore(e, build)}
                     className="shrink-0 rounded-lg p-2 text-graphite-500 hover:bg-signal-green/10 hover:text-signal-green"

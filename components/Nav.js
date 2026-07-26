@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calculator, Cpu, MessageSquare, Wrench, Tag } from "lucide-react";
+import { Calculator, Cpu, MessageSquare, ShieldCheck, Wrench, Tag } from "lucide-react";
 import UserMenu from "@/components/UserMenu";
+import { useAuth } from "@/components/AuthProvider";
 import { useNotifications } from "@/components/NotificationsProvider";
 
 const LINKS = [
@@ -17,6 +18,9 @@ const LINKS = [
 export default function Nav() {
   const pathname = usePathname();
   const { unreadCount } = useNotifications();
+  const { profile } = useAuth();
+
+  const links = profile?.role === "admin" ? [...LINKS, { href: "/admin", label: "Admin", icon: ShieldCheck }] : LINKS;
 
   return (
     <header className="sticky top-0 z-40 border-b border-graphite-700 bg-graphite-950/90 backdrop-blur">
@@ -31,7 +35,7 @@ export default function Nav() {
         </Link>
 
         <nav className="flex items-center gap-1 rounded-full border border-graphite-700 bg-graphite-900 p-1">
-          {LINKS.map(({ href, label, icon: Icon }) => {
+          {links.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname?.startsWith(href + "/");
             return (
               <Link

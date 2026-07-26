@@ -22,6 +22,7 @@ export default function BuildsPage() {
           .from("builds")
           .select("*")
           .eq("sold", false)
+          .is("deleted_at", null)
           .order("created_at", { ascending: false }),
         supabase.from("parts").select("*").not("build_id", "is", null),
       ]);
@@ -57,7 +58,24 @@ export default function BuildsPage() {
       )
     )
       return;
-    const { error } = await supabase.from("builds").delete().eq("id", build.id);
+
+    // Free up its parts first (soft-deleting no longer relies on a
+    // database cascade, since the row itself isn't actually removed).
+    const { error: partsError } = await supabase
+      .from("parts")
+      .update({ build_id: null })
+      .eq("build_id", build.id);
+    if (partsError) {
+      setErrorMsg(partsError.message);
+      return;
+    }
+
+    // Soft delete: mark it deleted rather than removing the row, so an
+    // admin can still see and restore it later.
+    const { error } = await supabase
+      .from("builds")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", build.id);
     if (error) {
       setErrorMsg(error.message);
       return;
