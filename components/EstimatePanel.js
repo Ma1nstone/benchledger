@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clipboard, Link2, Sparkles, Tag, Trash2, Wrench } from "lucide-react";
+import { Link2, Sparkles, Tag, Trash2, Wand2, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
 import { titleCase } from "@/lib/estimateParser";
@@ -18,15 +18,6 @@ export default function EstimatePanel() {
   const [listingPrice, setListingPrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-
-  async function handlePasteFromClipboard() {
-    try {
-      const clip = await navigator.clipboard.readText();
-      if (clip) setRaw(clip);
-    } catch {
-      setErrorMsg("Couldn't read the clipboard — your browser may need permission first.");
-    }
-  }
 
   async function handleAnalyze() {
     setAnalyzing(true);
@@ -57,6 +48,7 @@ export default function EstimatePanel() {
           price,
           range,
           aiPriced,
+          inferred: Boolean(it.inferred),
         };
       });
 
@@ -81,6 +73,7 @@ export default function EstimatePanel() {
   // to the nearest £5 so the numbers look like real offers, not maths.
   const offerPrice = Math.round((total * 0.85) / 5) * 5;
   const sellPrice = Math.round((total * 1.15) / 5) * 5;
+  const inferredCount = items.filter((it) => it.inferred).length;
 
   async function handleAddToBuilds() {
     if (items.length === 0) return;
@@ -145,14 +138,6 @@ export default function EstimatePanel() {
             {analyzing ? "Analyzing…" : "Analyze"}
           </button>
 
-          <button
-            onClick={handlePasteFromClipboard}
-            className="flex items-center gap-2 rounded-lg border border-graphite-600 bg-graphite-800 px-4 py-2 text-sm font-semibold text-white transition hover:border-graphite-500"
-          >
-            <Clipboard size={16} />
-            Paste from clipboard
-          </button>
-
           <div className="flex flex-1 min-w-[200px] items-center gap-2 rounded-lg border border-graphite-700 bg-graphite-800 px-3">
             <Tag size={14} className="shrink-0 text-graphite-500" />
             <input
@@ -176,15 +161,26 @@ export default function EstimatePanel() {
       {items.length > 0 && (
         <div className="rounded-xl border border-graphite-700 bg-graphite-900 p-4">
           <p className="mb-3 text-xs text-graphite-500">
-            Detected {items.length} part{items.length === 1 ? "" : "s"}. Prices marked{" "}
-            <span className="text-trace-400">AI estimate</span> come from the model's own
-            knowledge — edit any of them if you know better.
+            Detected {items.length} part{items.length === 1 ? "" : "s"}
+            {inferredCount > 0 && (
+              <>
+                {" "}
+                — <span className="text-blue-400">{inferredCount} filled in by AI</span> to
+                complete the build (not actually in the listing, double-check these)
+              </>
+            )}
+            . Prices marked <span className="text-trace-400">AI estimate</span> come from the
+            model's own knowledge — edit any of them if you know better.
           </p>
           <div className="flex flex-col gap-2">
             {items.map((item) => (
               <div
                 key={item.id}
-                className="flex flex-col gap-2 rounded-lg border border-graphite-700 bg-graphite-800/60 p-3 sm:flex-row sm:items-center"
+                className={`flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center ${
+                  item.inferred
+                    ? "border-blue-500/30 bg-blue-500/5"
+                    : "border-graphite-700 bg-graphite-800/60"
+                }`}
               >
                 <select
                   value={item.category}
@@ -200,13 +196,21 @@ export default function EstimatePanel() {
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-graphite-200">{titleCase(item.text)}</p>
-                  {item.aiPriced ? (
-                    <p className="text-[11px] text-trace-400">AI estimate</p>
-                  ) : item.range ? (
-                    <p className="text-[11px] text-graphite-500">
-                      Ballpark: {formatPrice(item.range[0])} – {formatPrice(item.range[1])}
-                    </p>
-                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {item.inferred && (
+                      <p className="flex items-center gap-1 text-[11px] text-blue-400">
+                        <Wand2 size={10} />
+                        AI-filled gap
+                      </p>
+                    )}
+                    {item.aiPriced ? (
+                      <p className="text-[11px] text-trace-400">AI estimate</p>
+                    ) : item.range ? (
+                      <p className="text-[11px] text-graphite-500">
+                        Ballpark: {formatPrice(item.range[0])} – {formatPrice(item.range[1])}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
                 <input
