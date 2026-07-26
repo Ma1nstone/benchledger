@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Lock, User } from "lucide-react";
+import { ArrowLeft, ExternalLink, Lock, MapPin, User } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { formatPrice } from "@/lib/constants";
 import { useAuth } from "@/components/AuthProvider";
 import { useNotifications } from "@/components/NotificationsProvider";
 import { getTopicConfig } from "@/lib/messageTopics";
+import MessageSellerTimeline from "@/components/MessageSellerTimeline";
 
 export default function MessageDetailPage() {
   const { id } = useParams();
@@ -46,6 +48,19 @@ export default function MessageDetailPage() {
     load();
   }, [load]);
 
+  async function handleNegotiationUpdate(newNegotiation) {
+    const newMetadata = { ...message.metadata, negotiation: newNegotiation };
+    const { error } = await supabase
+      .from("site_messages")
+      .update({ metadata: newMetadata })
+      .eq("id", message.id);
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setMessage((m) => ({ ...m, metadata: newMetadata }));
+  }
+
   if (loading) return <p className="text-sm text-graphite-500">Loading message…</p>;
   if (!message)
     return (
@@ -60,6 +75,8 @@ export default function MessageDetailPage() {
   const topic = getTopicConfig(message.topic);
   const creatorName = message.creator?.name || message.creator?.email || "Someone";
   const isPrivate = (message.recipient_ids || []).length > 0;
+  const isMessageSeller = message.topic === "message_seller";
+  const isOwner = user && message.creator_id === user.id;
 
   return (
     <div className="max-w-2xl">
@@ -108,6 +125,51 @@ export default function MessageDetailPage() {
           >
             View linked build →
           </Link>
+        )}
+
+        {isMessageSeller && (
+          <div className="mt-5 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
+              Listing details
+            </p>
+            <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm text-graphite-300 sm:grid-cols-2">
+              <p>
+                <span className="text-graphite-500">Marketplace:</span> {message.metadata.marketplace}
+              </p>
+              <p>
+                <span className="text-graphite-500">Listing price:</span>{" "}
+                {formatPrice(message.metadata.listing_price)}
+              </p>
+              <p>
+                <span className="text-graphite-500">Seller:</span> {message.metadata.seller_name}
+              </p>
+              <p className="flex items-center gap-1">
+                <MapPin size={12} className="text-graphite-500" />
+                {message.metadata.seller_location}
+              </p>
+            </div>
+            {message.metadata.listing_url && (
+              <a
+                href={message.metadata.listing_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 flex w-fit items-center gap-1 text-xs text-trace-400 hover:underline"
+              >
+                Open listing <ExternalLink size={11} />
+              </a>
+            )}
+            {message.metadata.notes && (
+              <p className="mt-2 text-xs text-graphite-500">{message.metadata.notes}</p>
+            )}
+          </div>
+        )}
+
+        {isMessageSeller && (
+          <MessageSellerTimeline
+            message={message}
+            isOwner={isOwner}
+            onUpdate={handleNegotiationUpdate}
+          />
         )}
       </div>
     </div>
