@@ -1,19 +1,20 @@
 // app/api/parse-listing/route.js
-// Uses Gemini to extract PC parts from a pasted listing AND estimate a
-// realistic current secondhand price for each, from the model's own
-// knowledge (no Search grounding — that hits a separate, much stricter
-// quota on free-tier keys and was causing 429s almost immediately).
+// Uses Gemini to extract PC parts from a pasted listing, estimate a
+// realistic current secondhand price for each, AND fill in any missing
+// essential components with a compatible, budget-appropriate choice.
+
+import { ESSENTIAL_CATEGORIES } from "@/lib/constants";
 
 const CATEGORIES = [
   "CPU", "GPU", "RAM", "Storage", "PSU",
   "Motherboard", "Case", "Cooler", "Monitor", "Other",
 ];
 
-const SYSTEM_PROMPT = `You are a PC hardware listing analyzer.
+const SYSTEM_PROMPT = `You are a PC hardware listing analyzer with deep knowledge of PC hardware compatibility.
 
 Read the secondhand PC/parts listing text below and extract every actual hardware component mentioned. For each one, give your best estimate of a realistic CURRENT UK secondhand/used price in GBP (eBay/Facebook Marketplace sold-listing territory, not retail/new price) based on your knowledge of the part.
 
-CATEGORY RULES — read carefully, these are commonly confused:
+CATEGORY RULES for what's actually mentioned — read carefully, these are commonly confused:
 - RAM: memory capacity — normally 4/8/16/32/64GB, described with the words "RAM", "memory", or "DDR3/DDR4/DDR5". A number of GB is ONLY RAM if the text actually calls it RAM/memory/DDR.
 - Storage: SSD, HDD, NVMe, "hard drive", "hard disk", or a capacity described as storage/disk space — this includes GB or TB values. Do NOT classify a storage capacity as RAM just because it's a number of GB. If a GB/TB figure has no explicit RAM/memory/DDR wording nearby, assume it is Storage, not RAM.
 - GPU: graphics card model (RTX/GTX/RX/Radeon, etc).
@@ -23,10 +24,21 @@ CATEGORY RULES — read carefully, these are commonly confused:
 - If the listing mentions several identical items (e.g. "2 monitors" or "comes with 2 monitors"), create ONE item describing the quantity — don't invent duplicate entries.
 - Ignore filler, greetings, and sales pitch language — only real hardware specs.
 
-Respond with ONLY a JSON array. Each item:
-{"text": "<the part as named in the listing>", "category": "<${CATEGORIES.join("|")}>", "price": <your best GBP price estimate as a number, or null if you genuinely can't estimate>}
+FILLING GAPS — this is important. After extracting what's mentioned, check which of these essential categories are missing from the listing: ${ESSENTIAL_CATEGORIES.join(", ")}. For each one that's missing, infer a realistic, budget-appropriate, and fully COMPATIBLE component to complete the build, based on what IS mentioned (especially the CPU and GPU). Never leave the specification incomplete, and never invent something that would be physically or electrically incompatible.
 
-If nothing is found, respond with exactly: []`;
+COMPATIBILITY RULES YOU MUST FOLLOW WHEN INFERRING:
+- CPU socket determines the motherboard: match the exact platform (e.g. an Intel 12th/13th-gen CPU, "F" suffix or not, needs an LGA1700 board; a Ryzen 5000-series CPU needs AM4; Ryzen 7000-series needs AM5).
+- Prefer a sensible BUDGET chipset unless the rest of the build clearly justifies more (LGA1700 → H610/B660/B760 rather than Z790; AM4 → A520/B450/B550 rather than X570 — unless a high-end GPU is present, in which case a mid-tier board is reasonable).
+- RAM generation (DDR4 vs DDR5) must match whichever motherboard is mentioned or inferred — never pair DDR5-only RAM with a DDR4-only board or vice versa.
+- PSU wattage must suit the CPU + GPU actually present (roughly: budget/mid GPU ~450-550W, RTX 3070/3080-class ~650-750W, higher-end more). Use a reliable budget or mid-range PSU model, not a premium one, unless the GPU demands it.
+- Case must support the inferred motherboard's form factor (ATX/mATX/ITX).
+- Cooler must physically fit the CPU's socket — a stock cooler is fine for lower-power CPUs; higher-TDP or overclockable CPUs may need a budget aftermarket cooler.
+- Storage, if missing, should suit the apparent age/budget of the build (a budget SATA SSD for an older system, NVMe for a newer one) — don't assume premium storage on a budget build.
+
+Respond with ONLY a JSON array. Each item:
+{"text": "<the part as named in the listing, or your inferred choice>", "category": "<${CATEGORIES.join("|")}>", "price": <your best GBP price estimate as a number, or null if you genuinely can't estimate>, "inferred": <true if you added this because it wasn't mentioned in the listing at all, false if it was actually stated>}
+
+If nothing is found at all, respond with exactly: []`;
 
 // gemini-2.5-flash-lite has been retired — gemini-3.5-flash-lite is the
 // current lightweight production model as of mid-2026.
@@ -92,6 +104,7 @@ export async function POST(req) {
         text: it.text.trim(),
         category: it.category,
         price: typeof it.price === "number" ? it.price : null,
+        inferred: Boolean(it.inferred),
       }));
 
     return Response.json(shaped);
