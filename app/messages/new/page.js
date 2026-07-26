@@ -37,6 +37,7 @@ export default function NewMessagePage() {
   const [msNotes, setMsNotes] = useState("");
 
   const isMessageSeller = topic === "message_seller";
+  const isShareBuild = topic === "share_build";
 
   useEffect(() => {
     if (!user) return;
@@ -52,6 +53,12 @@ export default function NewMessagePage() {
       .neq("id", user.id)
       .then(({ data }) => setOtherUsers(data || []));
   }, [user]);
+
+  // Sharing a build only makes sense to specific people — default the
+  // audience picker there, but it's still changeable.
+  useEffect(() => {
+    if (isShareBuild) setAudience("specific");
+  }, [isShareBuild]);
 
   function toggleUser(id) {
     setSelectedUserIds((prev) => {
@@ -87,6 +94,10 @@ export default function NewMessagePage() {
       );
       return;
     }
+    if (isShareBuild && !linkedBuildId) {
+      setErrorMsg("Pick which build you're sharing.");
+      return;
+    }
 
     setSaving(true);
     setErrorMsg("");
@@ -107,7 +118,7 @@ export default function NewMessagePage() {
             { id: "n1", type: "question", label: "Is this still available?", status: "pending" },
           ],
         }
-      : listingInfo.trim()
+      : !isShareBuild && listingInfo.trim()
       ? { listing_info: listingInfo.trim() }
       : {};
 
@@ -185,14 +196,20 @@ export default function NewMessagePage() {
 
         <div>
           <label className="mb-1 block text-xs text-graphite-500">
-            Linked build <span className="text-graphite-600">(optional)</span>
+            {isShareBuild ? (
+              "Build to share"
+            ) : (
+              <>
+                Linked build <span className="text-graphite-600">(optional)</span>
+              </>
+            )}
           </label>
           <select
             value={linkedBuildId}
             onChange={(e) => setLinkedBuildId(e.target.value)}
             className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white"
           >
-            <option value="">None</option>
+            <option value="">{isShareBuild ? "Choose a build…" : "None"}</option>
             {myBuilds.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
@@ -212,7 +229,7 @@ export default function NewMessagePage() {
           />
         </div>
 
-        {isMessageSeller ? (
+        {isMessageSeller && (
           <div className="lg:col-span-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-400">
               Message Seller details
@@ -308,7 +325,18 @@ export default function NewMessagePage() {
               &ldquo;Is this still available?&rdquo;
             </p>
           </div>
-        ) : (
+        )}
+
+        {isShareBuild && (
+          <div className="lg:col-span-2 rounded-lg border border-signal-amber/30 bg-signal-amber/5 p-4">
+            <p className="text-xs text-signal-amber">
+              Whoever accepts this will get full edit access to the build above — they can open it,
+              change its parts, prices, and photos, and keep working on it alongside you.
+            </p>
+          </div>
+        )}
+
+        {!isMessageSeller && !isShareBuild && (
           <div>
             <label className="mb-1 block text-xs text-graphite-500">
               Listing information <span className="text-graphite-600">(optional)</span>
@@ -390,7 +418,7 @@ export default function NewMessagePage() {
           className={`lg:col-span-2 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:opacity-60 ${activeTopic.bg} ${activeTopic.text} ring-1 ${activeTopic.ring} hover:brightness-110`}
         >
           <Send size={16} />
-          {saving ? "Sending…" : "Send Message"}
+          {saving ? "Sending…" : isShareBuild ? "Share Build" : "Send Message"}
         </button>
       </form>
     </div>

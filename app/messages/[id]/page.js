@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Lock, MapPin, User } from "lucide-react";
+import { ArrowLeft, ExternalLink, Lock, MapPin, User, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/constants";
 import { useAuth } from "@/components/AuthProvider";
@@ -18,12 +18,15 @@ export default function MessageDetailPage() {
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
+  const [accepting, setAccepting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("site_messages")
-      .select("*, creator:profiles!creator_id(name, email, avatar_url)")
+      .select(
+        "*, creator:profiles!creator_id(name, email, avatar_url), linked_build:builds!linked_build_id(id, name, owner_id, shared_user_ids)"
+      )
       .eq("id", id)
       .single();
 
@@ -61,6 +64,24 @@ export default function MessageDetailPage() {
     setMessage((m) => ({ ...m, metadata: newMetadata }));
   }
 
+  async function handleAcceptShare() {
+    setAccepting(true);
+    setErrorMsg("");
+    const { error } = await supabase.rpc("accept_build_share", { message_id: message.id });
+    setAccepting(false);
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setMessage((m) => ({
+      ...m,
+      linked_build: {
+        ...m.linked_build,
+        shared_user_ids: [...(m.linked_build.shared_user_ids || []), user.id],
+      },
+    }));
+  }
+
   if (loading) return <p className="text-sm text-graphite-500">Loading message…</p>;
   if (!message)
     return (
@@ -76,7 +97,14 @@ export default function MessageDetailPage() {
   const creatorName = message.creator?.name || message.creator?.email || "Someone";
   const isPrivate = (message.recipient_ids || []).length > 0;
   const isMessageSeller = message.topic === "message_seller";
+  const isShareBuild = message.topic === "share_build";
   const isOwner = user && message.creator_id === user.id;
+
+  const hasBuildAccess =
+    message.linked_build &&
+    user &&
+    (message.linked_build.owner_id === user.id ||
+      (message.linked_build.shared_user_ids || []).includes(user.id));
 
   return (
     <div className="max-w-2xl">
@@ -118,7 +146,7 @@ export default function MessageDetailPage() {
           </p>
         )}
 
-        {message.linked_build_id && (
+        {!isShareBuild && message.linked_build_id && (
           <Link
             href={`/builds/${message.linked_build_id}`}
             className="mt-4 inline-block text-sm text-trace-400 hover:underline"
@@ -170,6 +198,39 @@ export default function MessageDetailPage() {
             isOwner={isOwner}
             onUpdate={handleNegotiationUpdate}
           />
+        )}
+
+        {isShareBuild && message.linked_build && (
+          <div className="mt-5 rounded-lg border border-signal-amber/30 bg-signal-amber/5 p-4">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-signal-amber">
+              <Wrench size={12} />
+              Shared build
+            </p>
+            <p className="text-sm text-white">{message.linked_build.name}</p>
+
+            {hasBuildAccess ? (
+              <Link
+                href={`/builds/${message.linked_build.id}`}
+                className="mt-2 inline-flex items-center gap-1 text-xs text-trace-400 hover:underline"
+              >
+                Open build →
+              </Link>
+            ) : (
+              <button
+                onClick={handleAcceptShare}
+                disabled={accepting}
+                className="mt-2 rounded-lg bg-signal-amber/15 px-3 py-1.5 text-xs font-semibold text-signal-amber ring-1 ring-signal-amber/40 transition hover:bg-signal-amber/25 disabled:opacity-60"
+              >
+                {accepting ? "Adding…" : "Accept & Get Edit Access"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {errorMsg && (
+          <p className="mt-4 rounded-lg border border-signal-red/40 bg-signal-red/10 px-3 py-2 text-xs text-signal-red">
+            {errorMsg}
+          </p>
         )}
       </div>
     </div>
