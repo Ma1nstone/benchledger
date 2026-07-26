@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Send, Users } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
+import { MARKETPLACES } from "@/lib/constants";
 import { MESSAGE_TOPICS, getTopicConfig } from "@/lib/messageTopics";
 
 const DEFAULT_TOPIC = Object.keys(MESSAGE_TOPICS)[0];
@@ -24,6 +25,18 @@ export default function NewMessagePage() {
   const [selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  // Message Seller specific fields
+  const [msMarketplace, setMsMarketplace] = useState(MARKETPLACES[0]);
+  const [msListingUrl, setMsListingUrl] = useState("");
+  const [msSellerName, setMsSellerName] = useState("");
+  const [msSellerLocation, setMsSellerLocation] = useState("");
+  const [msListingPrice, setMsListingPrice] = useState("");
+  const [msFirstOffer, setMsFirstOffer] = useState("");
+  const [msCounterOffer, setMsCounterOffer] = useState("");
+  const [msNotes, setMsNotes] = useState("");
+
+  const isMessageSeller = topic === "message_seller";
 
   useEffect(() => {
     if (!user) return;
@@ -52,6 +65,7 @@ export default function NewMessagePage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!user) return;
+
     if (!title.trim() || !description.trim()) {
       setErrorMsg("Title and description are required.");
       return;
@@ -60,9 +74,42 @@ export default function NewMessagePage() {
       setErrorMsg("Pick at least one person, or switch to \u201cEveryone\u201d.");
       return;
     }
+    if (
+      isMessageSeller &&
+      (!msListingUrl.trim() ||
+        !msSellerName.trim() ||
+        !msSellerLocation.trim() ||
+        msListingPrice === "" ||
+        msFirstOffer === "")
+    ) {
+      setErrorMsg(
+        "Marketplace, listing URL, seller name, seller location, listing price, and first offer are all required for Message Seller."
+      );
+      return;
+    }
 
     setSaving(true);
     setErrorMsg("");
+
+    // Message Seller gets a structured metadata shape, seeded with the
+    // negotiation timeline's first entry — Step 9 renders and advances this.
+    const metadata = isMessageSeller
+      ? {
+          marketplace: msMarketplace,
+          listing_url: msListingUrl.trim(),
+          seller_name: msSellerName.trim(),
+          seller_location: msSellerLocation.trim(),
+          listing_price: Number(msListingPrice),
+          first_offer: Number(msFirstOffer),
+          counter_offer: msCounterOffer === "" ? null : Number(msCounterOffer),
+          notes: msNotes.trim() || null,
+          negotiation: [
+            { id: "n1", type: "question", label: "Is this still available?", status: "pending" },
+          ],
+        }
+      : listingInfo.trim()
+      ? { listing_info: listingInfo.trim() }
+      : {};
 
     const { data, error } = await supabase
       .from("site_messages")
@@ -72,7 +119,7 @@ export default function NewMessagePage() {
         title: title.trim(),
         description: description.trim(),
         linked_build_id: linkedBuildId || null,
-        metadata: listingInfo.trim() ? { listing_info: listingInfo.trim() } : {},
+        metadata,
         recipient_ids: audience === "specific" ? Array.from(selectedUserIds) : [],
       })
       .select()
@@ -159,23 +206,121 @@ export default function NewMessagePage() {
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={8}
+            rows={5}
             placeholder="Details..."
             className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
           />
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs text-graphite-500">
-            Listing information <span className="text-graphite-600">(optional)</span>
-          </label>
-          <input
-            value={listingInfo}
-            onChange={(e) => setListingInfo(e.target.value)}
-            placeholder="Listing URL or other details"
-            className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
-          />
-        </div>
+        {isMessageSeller ? (
+          <div className="lg:col-span-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-400">
+              Message Seller details
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs text-graphite-500">Marketplace platform</label>
+                <select
+                  value={msMarketplace}
+                  onChange={(e) => setMsMarketplace(e.target.value)}
+                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white"
+                >
+                  {MARKETPLACES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-graphite-500">Listing URL</label>
+                <input
+                  value={msListingUrl}
+                  onChange={(e) => setMsListingUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-graphite-500">Seller name</label>
+                <input
+                  value={msSellerName}
+                  onChange={(e) => setMsSellerName(e.target.value)}
+                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-graphite-500">Seller location</label>
+                <input
+                  value={msSellerLocation}
+                  onChange={(e) => setMsSellerLocation(e.target.value)}
+                  placeholder="e.g. Manchester"
+                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-graphite-500">Listing price (£)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={msListingPrice}
+                  onChange={(e) => setMsListingPrice(e.target.value)}
+                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-graphite-500">First offer (£)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={msFirstOffer}
+                  onChange={(e) => setMsFirstOffer(e.target.value)}
+                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-graphite-500">
+                  Counter offer (£) <span className="text-graphite-600">(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={msCounterOffer}
+                  onChange={(e) => setMsCounterOffer(e.target.value)}
+                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs text-graphite-500">Notes</label>
+                <textarea
+                  value={msNotes}
+                  onChange={(e) => setMsNotes(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white"
+                />
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-graphite-600">
+              This automatically starts a negotiation timeline on the message, beginning with
+              &ldquo;Is this still available?&rdquo;
+            </p>
+          </div>
+        ) : (
+          <div>
+            <label className="mb-1 block text-xs text-graphite-500">
+              Listing information <span className="text-graphite-600">(optional)</span>
+            </label>
+            <input
+              value={listingInfo}
+              onChange={(e) => setListingInfo(e.target.value)}
+              placeholder="Listing URL or other details"
+              className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+            />
+          </div>
+        )}
 
         <div>
           <label className="mb-1 flex items-center gap-1.5 text-xs text-graphite-500">
