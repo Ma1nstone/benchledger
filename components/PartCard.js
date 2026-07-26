@@ -1,26 +1,48 @@
 "use client";
 
-import { ExternalLink, Trash2, Package } from "lucide-react";
+import { Check, ExternalLink, Trash2, Package } from "lucide-react";
 import { formatPrice } from "@/lib/constants";
 
 export default function PartCard({ part, buildName, onDelete, selectable, selected, onToggleSelect }) {
   const used = Boolean(part.build_id);
   const isOffer = part.price_type === "Offer";
 
+  function handleCardClick() {
+    if (selectable) onToggleSelect(part);
+  }
+
+  function handleCardKeyDown(e) {
+    if (selectable && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      onToggleSelect(part);
+    }
+  }
+
   return (
     <div
+      role={selectable ? "button" : undefined}
+      tabIndex={selectable ? 0 : undefined}
+      onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
       className={`flex items-center gap-4 rounded-xl border bg-graphite-900 p-4 transition ${
-        selected ? "border-trace-500/60 bg-trace-500/5" : "border-graphite-700 hover:border-graphite-600"
+        selectable ? "cursor-pointer" : ""
+      } ${
+        selected
+          ? "border-trace-500/60 bg-trace-500/5"
+          : "border-graphite-700 hover:border-graphite-600"
       }`}
     >
       {selectable && (
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={() => onToggleSelect(part)}
-          className="h-4 w-4 shrink-0 rounded border-graphite-600 bg-graphite-800 accent-trace-500"
-          aria-label={`Select ${part.name}`}
-        />
+        <span
+          className={`grid h-5 w-5 shrink-0 place-items-center rounded border transition ${
+            selected
+              ? "border-trace-500 bg-trace-500 text-graphite-950"
+              : "border-graphite-600 bg-graphite-800"
+          }`}
+          aria-hidden="true"
+        >
+          {selected && <Check size={13} strokeWidth={3} />}
+        </span>
       )}
 
       <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-graphite-800 ring-1 ring-graphite-700">
@@ -65,6 +87,7 @@ export default function PartCard({ part, buildName, onDelete, selectable, select
             href={part.link}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
             className="mt-1 flex items-center justify-end gap-1 text-xs text-trace-400 hover:text-trace-300"
           >
             Listing <ExternalLink size={12} />
@@ -73,7 +96,10 @@ export default function PartCard({ part, buildName, onDelete, selectable, select
       </div>
 
       <button
-        onClick={() => onDelete(part)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(part);
+        }}
         className="shrink-0 rounded-lg p-2 text-graphite-500 hover:bg-signal-red/10 hover:text-signal-red"
         aria-label={`Delete ${part.name}`}
         title="Delete part"
