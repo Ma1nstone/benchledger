@@ -12,6 +12,9 @@ const NotificationsContext = createContext({
   setSoundEnabled: () => {},
 });
 
+const BASE_TITLE = "PC Scout";
+const BASE_FAVICON = "/favicon.svg?v=2";
+
 // A short beep generated on the fly — no audio file needed.
 function playBeep() {
   try {
@@ -30,6 +33,57 @@ function playBeep() {
   }
 }
 
+// Draws the real favicon onto a canvas, adds a red count badge in the
+// corner if count > 0, and swaps the tab icon to the result. Removing and
+// re-adding the <link> (rather than just changing its href) is needed
+// because some browsers ignore href updates on an existing icon link.
+function updateFavicon(count) {
+  if (typeof document === "undefined") return;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+
+  const img = new Image();
+  img.src = BASE_FAVICON;
+  img.onload = () => {
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.drawImage(img, 0, 0, 64, 64);
+
+    if (count > 0) {
+      const radius = 20;
+      const cx = 64 - radius / 1.3;
+      const cy = radius / 1.3;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+      ctx.fillStyle = "#ef4444";
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#0a0a0f";
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 26px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(count > 9 ? "9+" : String(count), cx, cy + 2);
+    }
+
+    document
+      .querySelectorAll("link[data-dynamic-favicon]")
+      .forEach((el) => el.remove());
+
+    const link = document.createElement("link");
+    link.rel = "icon";
+    link.type = "image/png";
+    link.setAttribute("data-dynamic-favicon", "true");
+    link.href = canvas.toDataURL("image/png");
+    document.head.appendChild(link);
+  };
+}
+
 export function NotificationsProvider({ children }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -46,6 +100,12 @@ export function NotificationsProvider({ children }) {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("notif_sound", String(soundEnabled));
   }, [soundEnabled]);
+
+  // Tab title + favicon badge — Discord/Gmail-style unread indicator.
+  useEffect(() => {
+    document.title = unreadCount > 0 ? `(${unreadCount > 9 ? "9+" : unreadCount}) ${BASE_TITLE}` : BASE_TITLE;
+    updateFavicon(unreadCount);
+  }, [unreadCount]);
 
   const refreshCount = useCallback(async () => {
     if (!user) {
