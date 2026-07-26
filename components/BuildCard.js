@@ -50,9 +50,21 @@ export default function BuildCard({ build, parts, onDelete }) {
           </p>
         </div>
 
-        <p className="shrink-0 font-mono text-lg font-semibold text-white">
-          {formatPrice(total)}
-        </p>
+        <div className="shrink-0 text-right">
+          <p className="text-[11px] text-graphite-500">Cost</p>
+          <p className="font-mono text-base font-semibold text-white">
+            {formatPrice(total)}
+          </p>
+        </div>
+
+        {build.listing_price != null && (
+          <div className="shrink-0 text-right">
+            <p className="text-[11px] text-graphite-500">Listed</p>
+            <p className="font-mono text-base font-semibold text-signal-amber">
+              {formatPrice(build.listing_price)}
+            </p>
+          </div>
+        )}
 
         <span
           className={`status-dot h-3 w-3 shrink-0 rounded-full ${
