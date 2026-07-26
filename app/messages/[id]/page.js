@@ -6,11 +6,13 @@ import Link from "next/link";
 import { ArrowLeft, Lock, User } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
+import { useNotifications } from "@/components/NotificationsProvider";
 import { getTopicConfig } from "@/lib/messageTopics";
 
 export default function MessageDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { markMessageRead } = useNotifications();
   const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -33,15 +35,12 @@ export default function MessageDetailPage() {
     setLoading(false);
 
     // Mark as read for whoever's viewing it (not the creator — they never
-    // got a notification row for their own message).
+    // got a notification row for their own message). Goes through the
+    // shared notifications context so the nav badge updates immediately.
     if (user && data.creator_id !== user.id) {
-      await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("message_id", id)
-        .eq("user_id", user.id);
+      await markMessageRead(id);
     }
-  }, [id, user]);
+  }, [id, user, markMessageRead]);
 
   useEffect(() => {
     load();

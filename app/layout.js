@@ -1,6 +1,7 @@
 import "./globals.css";
 import Nav from "@/components/Nav";
 import { AuthProvider } from "@/components/AuthProvider";
+import { NotificationsProvider } from "@/components/NotificationsProvider";
 
 export const metadata = {
   title: "PC Scout",
@@ -13,9 +14,6 @@ export const metadata = {
     shortcut: "/favicon.ico?v=2",
     apple: "/favicon.svg?v=2",
   },
-  // This is what actually renders <meta name="google-site-verification"
-  // content="..." /> into the page <head> — Next.js generates the tag
-  // from this field automatically, no manual <meta> needed anywhere.
   verification: {
     google: "G_UQJv4-XiQh8IozCGr71392gQydSztZYtYFkV3spZo",
   },
@@ -45,8 +43,10 @@ export default function RootLayout({ children }) {
       </head>
       <body className="min-h-screen font-sans antialiased">
         <AuthProvider>
-          <Nav />
-          <main className="mx-auto max-w-[1600px] px-6 py-8 sm:px-10">{children}</main>
+          <NotificationsProvider>
+            <Nav />
+            <main className="mx-auto max-w-[1600px] px-6 py-8 sm:px-10">{children}</main>
+          </NotificationsProvider>
         </AuthProvider>
       </body>
     </html>

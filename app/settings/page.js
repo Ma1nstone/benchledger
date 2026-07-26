@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, LogOut, User } from "lucide-react";
+import { ExternalLink, LogOut, User, Volume2, VolumeX } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
+import { useNotifications } from "@/components/NotificationsProvider";
 
 export default function SettingsPage() {
   const { user, profile, signOut, refreshProfile } = useAuth();
+  const { soundEnabled, setSoundEnabled } = useNotifications();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -78,6 +80,32 @@ export default function SettingsPage() {
         </p>
       )}
       {saving && <p className="mb-4 text-xs text-graphite-500">Saving…</p>}
+
+      <div className="mb-6 rounded-xl border border-graphite-700 bg-graphite-900 p-5">
+        <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
+          Notifications
+        </h2>
+        <button
+          onClick={() => setSoundEnabled(!soundEnabled)}
+          className="flex w-full items-center justify-between rounded-lg bg-graphite-800/60 px-3 py-2.5 text-sm text-graphite-300 hover:bg-graphite-800"
+        >
+          <span className="flex items-center gap-2">
+            {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            Play a sound for new messages
+          </span>
+          <span
+            className={`relative h-5 w-9 shrink-0 rounded-full transition ${
+              soundEnabled ? "bg-trace-500" : "bg-graphite-700"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition ${
+                soundEnabled ? "left-4" : "left-0.5"
+              }`}
+            />
+          </span>
+        </button>
+      </div>
 
       <div className="mb-6 rounded-xl border border-graphite-700 bg-graphite-900 p-5">
         <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Calculator, Cpu, MessageSquare, Wrench, Tag } from "lucide-react";
 import UserMenu from "@/components/UserMenu";
+import { useNotifications } from "@/components/NotificationsProvider";
 
 const LINKS = [
   { href: "/parts", label: "Parts", icon: Cpu },
@@ -15,6 +16,7 @@ const LINKS = [
 
 export default function Nav() {
   const pathname = usePathname();
+  const { unreadCount } = useNotifications();
 
   return (
     <header className="sticky top-0 z-40 border-b border-graphite-700 bg-graphite-950/90 backdrop-blur">
@@ -35,7 +37,7 @@ export default function Nav() {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
                   active
                     ? "bg-trace-500/15 text-trace-400 ring-1 ring-trace-500/40"
                     : "text-graphite-500 hover:text-white"
@@ -43,6 +45,11 @@ export default function Nav() {
               >
                 <Icon size={15} />
                 {label}
+                {href === "/messages" && unreadCount > 0 && (
+                  <span className="grid h-4 min-w-[16px] place-items-center rounded-full bg-signal-red px-1 text-[10px] font-bold text-white">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
               </Link>
             );
           })}
