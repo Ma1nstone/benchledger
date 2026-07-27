@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import BuildCard from "@/components/BuildCard";
+
+const SUBTABS = [
+  { key: "manual", label: "Builds" },
+  { key: "estimate", label: "Estimate Builds" },
+];
 
 export default function BuildsPage() {
   const router = useRouter();
@@ -13,6 +18,7 @@ export default function BuildsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [subtab, setSubtab] = useState("manual");
 
   async function loadData() {
     setLoading(true);
@@ -36,11 +42,16 @@ export default function BuildsPage() {
     loadData();
   }, []);
 
+  const visibleBuilds = useMemo(
+    () => builds.filter((b) => (b.source || "manual") === subtab),
+    [builds, subtab]
+  );
+
   async function handleNewBuild() {
     setCreating(true);
     const { data, error } = await supabase
       .from("builds")
-      .insert({ name: "New Build" })
+      .insert({ name: "New Build", source: "manual" })
       .select()
       .single();
     setCreating(false);
@@ -59,8 +70,6 @@ export default function BuildsPage() {
     )
       return;
 
-    // Free up its parts first (soft-deleting no longer relies on a
-    // database cascade, since the row itself isn't actually removed).
     const { error: partsError } = await supabase
       .from("parts")
       .update({ build_id: null })
@@ -70,8 +79,6 @@ export default function BuildsPage() {
       return;
     }
 
-    // Soft delete: mark it deleted rather than removing the row, so an
-    // admin can still see and restore it later.
     const { error } = await supabase
       .from("builds")
       .update({ deleted_at: new Date().toISOString() })
@@ -81,6 +88,19 @@ export default function BuildsPage() {
       return;
     }
     setBuilds((prev) => prev.filter((b) => b.id !== build.id));
+  }
+
+  async function handleMoveTab(build) {
+    const newSource = (build.source || "manual") === "manual" ? "estimate" : "manual";
+    const { error } = await supabase
+      .from("builds")
+      .update({ source: newSource })
+      .eq("id", build.id);
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setBuilds((prev) => prev.map((b) => (b.id === build.id ? { ...b, source: newSource } : b)));
   }
 
   return (
@@ -102,6 +122,22 @@ export default function BuildsPage() {
         </button>
       </div>
 
+      <div className="mb-5 flex w-fit gap-1 rounded-full border border-graphite-700 bg-graphite-900 p-1">
+        {SUBTABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setSubtab(t.key)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+              subtab === t.key
+                ? "bg-trace-500/15 text-trace-400 ring-1 ring-trace-500/40"
+                : "text-graphite-500 hover:text-white"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {errorMsg && (
         <p className="mb-4 rounded-lg border border-signal-red/40 bg-signal-red/10 px-4 py-2 text-sm text-signal-red">
           {errorMsg}
@@ -110,20 +146,23 @@ export default function BuildsPage() {
 
       {loading ? (
         <p className="text-sm text-graphite-500">Loading builds…</p>
-      ) : builds.length === 0 ? (
+      ) : visibleBuilds.length === 0 ? (
         <div className="rounded-xl border border-dashed border-graphite-700 bg-graphite-900/50 p-10 text-center">
           <p className="text-graphite-400">
-            No builds yet — click &ldquo;New build&rdquo; to start assembling one.
+            {subtab === "manual"
+              ? "No builds here yet — click \u201cNew build\u201d to start assembling one."
+              : "No Estimate-created builds yet — use the Estimate tool's \u201cAdd to Builds\u201d to create one."}
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {builds.map((build) => (
+          {visibleBuilds.map((build) => (
             <BuildCard
               key={build.id}
               build={build}
               parts={parts.filter((p) => p.build_id === build.id)}
               onDelete={handleDelete}
+              onMoveTab={handleMoveTab}
             />
           ))}
         </div>

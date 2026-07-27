@@ -90,6 +90,7 @@ export default function EstimatePanel() {
           listing_price: listingPrice === "" ? null : Number(listingPrice),
           offer_price: offerPrice,
           sell_price: sellPrice,
+          source: "estimate",
         })
         .select()
         .single();

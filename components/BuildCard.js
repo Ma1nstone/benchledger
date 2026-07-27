@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2 } from "lucide-react";
 import { ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 
-export default function BuildCard({ build, parts, onDelete }) {
+export default function BuildCard({ build, parts, onDelete, onMoveTab }) {
   const [open, setOpen] = useState(false);
 
   const total = parts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
@@ -161,6 +161,16 @@ export default function BuildCard({ build, parts, onDelete }) {
                   (cat) => !parts.some((p) => p.category === cat)
                 ).join(", ")}
               </p>
+            )}
+
+            {onMoveTab && (
+              <button
+                onClick={() => onMoveTab(build)}
+                className="mt-4 flex w-fit items-center gap-1.5 rounded-lg bg-graphite-800 px-3 py-1.5 text-xs font-medium text-graphite-400 transition hover:bg-graphite-700 hover:text-white"
+              >
+                <ArrowLeftRight size={13} />
+                Move to {build.source === "estimate" ? "Builds" : "Estimate Builds"}
+              </button>
             )}
           </div>
         </div>
