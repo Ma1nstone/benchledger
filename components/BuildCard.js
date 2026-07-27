@@ -57,13 +57,22 @@ export default function BuildCard({ build, parts, onDelete }) {
           </p>
         </div>
 
-        {build.listing_price != null && (
+        {build.accepted_price != null ? (
           <div className="shrink-0 text-right">
-            <p className="text-[11px] text-graphite-500">Listed</p>
-            <p className="font-mono text-base font-semibold text-signal-amber">
-              {formatPrice(build.listing_price)}
+            <p className="text-[11px] text-graphite-500">Accepted</p>
+            <p className="font-mono text-base font-semibold text-signal-green">
+              {formatPrice(build.accepted_price)}
             </p>
           </div>
+        ) : (
+          build.listing_price != null && (
+            <div className="shrink-0 text-right">
+              <p className="text-[11px] text-graphite-500">Listed</p>
+              <p className="font-mono text-base font-semibold text-signal-amber">
+                {formatPrice(build.listing_price)}
+              </p>
+            </div>
+          )
         )}
 
         <span

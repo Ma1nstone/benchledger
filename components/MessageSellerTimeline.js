@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Clock, X } from "lucide-react";
+import { useState } from "react";
+import { Check, Clock, MapPin, X } from "lucide-react";
 import { formatPrice } from "@/lib/constants";
 
 const STATUS_STYLES = {
@@ -52,9 +53,21 @@ function StatusBadge({ status }) {
 // ("live") entry ever gets action buttons. canInteract covers both the
 // message's creator AND anyone it was privately sent to — either side of
 // the negotiation can advance it.
-export default function MessageSellerTimeline({ message, canInteract, onUpdate }) {
+//
+// onUpdate(newNegotiationArray, acceptedAmount) — acceptedAmount is only
+// non-null the moment an offer/counter offer is accepted, so the parent
+// can sync it onto the linked build.
+export default function MessageSellerTimeline({ message, canInteract, onUpdate, onSaveCollection }) {
   const negotiation = message.metadata?.negotiation || [];
   const counterOfferAmount = message.metadata?.counter_offer;
+
+  const [collectionDate, setCollectionDate] = useState(message.metadata?.collection?.date || "");
+  const [collectionTime, setCollectionTime] = useState(message.metadata?.collection?.time || "");
+  const [savingCollection, setSavingCollection] = useState(false);
+
+  const hasAcceptedOffer = negotiation.some(
+    (e) => (e.type === "offer" || e.type === "counter_offer") && e.status === "accepted"
+  );
 
   function handleMarkReplied(entryId) {
     const updated = negotiation.map((e) => (e.id === entryId ? { ...e, status: "replied" } : e));
@@ -65,10 +78,10 @@ export default function MessageSellerTimeline({ message, canInteract, onUpdate }
       amount: message.metadata.first_offer,
       status: "pending",
     });
-    onUpdate(updated);
+    onUpdate(updated, null);
   }
 
-  function handleOfferDecision(entryId, decision) {
+  function handleOfferDecision(entryId, decision, amount) {
     const updated = negotiation.map((e) => (e.id === entryId ? { ...e, status: decision } : e));
     if (decision === "declined" && entryId === "offer1" && counterOfferAmount != null) {
       updated.push({
@@ -79,7 +92,13 @@ export default function MessageSellerTimeline({ message, canInteract, onUpdate }
         status: "pending",
       });
     }
-    onUpdate(updated);
+    onUpdate(updated, decision === "accepted" ? amount : null);
+  }
+
+  async function handleSaveCollection() {
+    setSavingCollection(true);
+    await onSaveCollection({ date: collectionDate, time: collectionTime });
+    setSavingCollection(false);
   }
 
   if (negotiation.length === 0) return null;
@@ -120,13 +139,13 @@ export default function MessageSellerTimeline({ message, canInteract, onUpdate }
               {canAct && (entry.type === "offer" || entry.type === "counter_offer") && (
                 <div className="mt-2 flex gap-2">
                   <button
-                    onClick={() => handleOfferDecision(entry.id, "accepted")}
+                    onClick={() => handleOfferDecision(entry.id, "accepted", entry.amount)}
                     className="rounded-lg bg-signal-green/15 px-3 py-1.5 text-xs font-semibold text-signal-green ring-1 ring-signal-green/40 transition hover:bg-signal-green/25"
                   >
                     Accept
                   </button>
                   <button
-                    onClick={() => handleOfferDecision(entry.id, "declined")}
+                    onClick={() => handleOfferDecision(entry.id, "declined", entry.amount)}
                     className="rounded-lg bg-signal-red/15 px-3 py-1.5 text-xs font-semibold text-signal-red ring-1 ring-signal-red/40 transition hover:bg-signal-red/25"
                   >
                     Decline
@@ -137,6 +156,44 @@ export default function MessageSellerTimeline({ message, canInteract, onUpdate }
           );
         })}
       </div>
+
+      {hasAcceptedOffer && (
+        <div className="mt-4 rounded-lg border border-signal-green/30 bg-signal-green/5 p-3">
+          <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-signal-green">
+            <MapPin size={12} />
+            Collection details
+          </p>
+          {canInteract ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={collectionDate}
+                onChange={(e) => setCollectionDate(e.target.value)}
+                className="rounded-lg border border-graphite-700 bg-graphite-800 px-2 py-1.5 text-sm text-white"
+              />
+              <input
+                type="time"
+                value={collectionTime}
+                onChange={(e) => setCollectionTime(e.target.value)}
+                className="rounded-lg border border-graphite-700 bg-graphite-800 px-2 py-1.5 text-sm text-white"
+              />
+              <button
+                onClick={handleSaveCollection}
+                disabled={savingCollection}
+                className="rounded-lg bg-signal-green/15 px-3 py-1.5 text-xs font-semibold text-signal-green ring-1 ring-signal-green/40 transition hover:bg-signal-green/25 disabled:opacity-60"
+              >
+                {savingCollection ? "Saving…" : "Save"}
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-graphite-300">
+              {collectionDate || collectionTime
+                ? `${collectionDate} ${collectionTime}`.trim()
+                : "Not arranged yet."}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -25,7 +25,7 @@ export default function MessageDetailPage() {
     const { data, error } = await supabase
       .from("site_messages")
       .select(
-        "*, creator:profiles!creator_id(name, email, avatar_url), linked_build:builds!linked_build_id(id, name, owner_id, shared_user_ids)"
+        "*, creator:profiles!creator_id(name, email, avatar_url), linked_build:builds!linked_build_id(id, name, owner_id, shared_user_ids, accepted_price, listing_price)"
       )
       .eq("id", id)
       .single();
@@ -48,8 +48,48 @@ export default function MessageDetailPage() {
     load();
   }, [load]);
 
-  async function handleNegotiationUpdate(newNegotiation) {
+  // acceptedAmount is only set the moment an offer/counter offer gets
+  // accepted — when that happens (and a build is linked), sync the price
+  // onto that build so its card shows what it actually sold for.
+  async function handleNegotiationUpdate(newNegotiation, acceptedAmount) {
     const newMetadata = { ...message.metadata, negotiation: newNegotiation };
+    const { error } = await supabase
+      .from("site_messages")
+      .update({ metadata: newMetadata })
+      .eq("id", message.id);
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+    setMessage((m) => ({ ...m, metadata: newMetadata }));
+
+    if (acceptedAmount == null || !message.linked_build) return;
+
+    // Only attempt this if the current user actually has edit rights on
+    // that build (owner, shared, or admin) — otherwise builds RLS would
+    // reject it anyway, so skip quietly rather than showing a scary error.
+    const canEditBuild =
+      user &&
+      (message.linked_build.owner_id === user.id ||
+        (message.linked_build.shared_user_ids || []).includes(user.id));
+    if (!canEditBuild) return;
+
+    const { error: buildError } = await supabase
+      .from("builds")
+      .update({ accepted_price: acceptedAmount })
+      .eq("id", message.linked_build.id);
+    if (buildError) {
+      setErrorMsg(buildError.message);
+      return;
+    }
+    setMessage((m) => ({
+      ...m,
+      linked_build: { ...m.linked_build, accepted_price: acceptedAmount },
+    }));
+  }
+
+  async function handleSaveCollection(collection) {
+    const newMetadata = { ...message.metadata, collection };
     const { error } = await supabase
       .from("site_messages")
       .update({ metadata: newMetadata })
@@ -196,6 +236,7 @@ export default function MessageDetailPage() {
             message={message}
             canInteract={canInteract}
             onUpdate={handleNegotiationUpdate}
+            onSaveCollection={handleSaveCollection}
           />
         )}
 
