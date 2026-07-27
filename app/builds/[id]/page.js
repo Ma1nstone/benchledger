@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, ExternalLink, ImagePlus, Link2, Plus, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
+import { usePasteImage } from "@/hooks/usePasteImage";
 import { CATEGORIES, ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 import PartPicker from "@/components/PartPicker";
 import BuildAssistant from "@/components/BuildAssistant";
@@ -122,8 +123,7 @@ export default function BuildDetailPage() {
     else setBuild((b) => ({ ...b, sell_price: value }));
   }
 
-  async function handleImageChange(e) {
-    const file = e.target.files?.[0];
+  async function uploadAndSetImage(file) {
     if (!file) return;
     setSaving(true);
     try {
@@ -137,6 +137,15 @@ export default function BuildDetailPage() {
       setSaving(false);
     }
   }
+
+  function handleImageChange(e) {
+    const file = e.target.files?.[0];
+    uploadAndSetImage(file);
+  }
+
+  // The photo upload area is always present on this page (no modal to
+  // gate it on), so paste-to-upload is enabled once the build has loaded.
+  usePasteImage(!loading && Boolean(build), uploadAndSetImage);
 
   function optionsFor(category) {
     return allParts.filter((p) => p.category === category && !p.build_id);
@@ -321,6 +330,7 @@ export default function BuildDetailPage() {
             {build.image_url ? "Change photo" : "Add photo"}
             <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
           </label>
+          <p className="mt-1 text-[11px] text-graphite-600">or paste an image (Ctrl+V / Cmd+V)</p>
 
           <label className="mb-1 mt-3 flex items-center gap-1.5 text-xs text-graphite-500">
             <Link2 size={12} />
@@ -478,7 +488,8 @@ export default function BuildDetailPage() {
           onClose={() => setPickerCategory(null)}
         />
       )}
-     <BuildAssistant parts={assignedParts} total={total} />
+
+      <BuildAssistant parts={assignedParts} total={total} />
     </div>
   );
 }
