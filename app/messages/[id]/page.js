@@ -49,8 +49,10 @@ export default function MessageDetailPage() {
   }, [load]);
 
   // acceptedAmount is only set the moment an offer/counter offer gets
-  // accepted — when that happens (and a build is linked), sync the price
-  // onto that build so its card shows what it actually sold for.
+  // accepted (or when manually re-triggered) — when that happens (and a
+  // build is linked), sync the price onto that build. Uses the flat
+  // message.linked_build_id (always reliable) rather than the embedded
+  // linked_build.id, and surfaces any failure instead of failing silently.
   async function handleNegotiationUpdate(newNegotiation, acceptedAmount) {
     const newMetadata = { ...message.metadata, negotiation: newNegotiation };
     const { error } = await supabase
@@ -63,28 +65,27 @@ export default function MessageDetailPage() {
     }
     setMessage((m) => ({ ...m, metadata: newMetadata }));
 
-    if (acceptedAmount == null || !message.linked_build) return;
+    if (acceptedAmount == null) return;
+    if (!message.linked_build_id) return;
 
-    // Only attempt this if the current user actually has edit rights on
-    // that build (owner, shared, or admin) — otherwise builds RLS would
-    // reject it anyway, so skip quietly rather than showing a scary error.
-    const canEditBuild =
-      user &&
-      (message.linked_build.owner_id === user.id ||
-        (message.linked_build.shared_user_ids || []).includes(user.id));
-    if (!canEditBuild) return;
-
-    const { error: buildError } = await supabase
+    const { data: updatedBuild, error: buildError } = await supabase
       .from("builds")
       .update({ accepted_price: acceptedAmount })
-      .eq("id", message.linked_build.id);
+      .eq("id", message.linked_build_id)
+      .select("id, accepted_price")
+      .single();
+
     if (buildError) {
-      setErrorMsg(buildError.message);
+      setErrorMsg(
+        `Offer accepted, but couldn't update the linked build's price: ${buildError.message}`
+      );
       return;
     }
+
+    setErrorMsg("");
     setMessage((m) => ({
       ...m,
-      linked_build: { ...m.linked_build, accepted_price: acceptedAmount },
+      linked_build: { ...(m.linked_build || {}), ...updatedBuild },
     }));
   }
 
