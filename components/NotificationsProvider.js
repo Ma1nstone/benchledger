@@ -11,12 +11,20 @@ const NotificationsContext = createContext({
   soundEnabled: true,
   setSoundEnabled: () => {},
   sendTestPing: () => {},
+  notifPermission: "unsupported",
+  requestNotifPermission: async () => {},
 });
 
-const BASE_TITLE = "PCScout";
+const BASE_TITLE = "PC Scout";
 const BASE_FAVICON = "/favicon.svg?v=2";
 
-// A short beep generated on the fly — no audio file needed.
+function browserNotifSupported() {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+// A short beep generated on the fly — no audio file needed. Only used for
+// the in-app toast fallback; real OS notifications already make their own
+// sound, so we don't want to double up.
 function playBeep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -35,9 +43,7 @@ function playBeep() {
 }
 
 // Draws the real favicon onto a canvas, adds a red count badge in the
-// corner if count > 0, and swaps the tab icon to the result. Removing and
-// re-adding the <link> (rather than just changing its href) is needed
-// because some browsers ignore href updates on an existing icon link.
+// corner if count > 0, and swaps the tab icon to the result.
 function updateFavicon(count) {
   if (typeof document === "undefined") return;
 
@@ -72,9 +78,7 @@ function updateFavicon(count) {
       ctx.fillText(count > 9 ? "9+" : String(count), cx, cy + 2);
     }
 
-    document
-      .querySelectorAll("link[data-dynamic-favicon]")
-      .forEach((el) => el.remove());
+    document.querySelectorAll("link[data-dynamic-favicon]").forEach((el) => el.remove());
 
     const link = document.createElement("link");
     link.rel = "icon";
@@ -91,6 +95,46 @@ export function NotificationsProvider({ children }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [toasts, setToasts] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notifPermission, setNotifPermission] = useState("unsupported");
+
+  useEffect(() => {
+    if (browserNotifSupported()) setNotifPermission(Notification.permission);
+  }, []);
+
+  // Must be called from a real click (browsers block permission prompts
+  // that aren't triggered by direct user interaction).
+  async function requestNotifPermission() {
+    if (!browserNotifSupported()) return "unsupported";
+    const result = await Notification.requestPermission();
+    setNotifPermission(result);
+    return result;
+  }
+
+  // Fires a real OS-level notification if permitted; otherwise falls back
+  // to the in-app bottom-right toast.
+  function notify(title, body, messageId) {
+    if (browserNotifSupported() && notifPermission === "granted") {
+      const n = new Notification(title, {
+        body: body || "PC Scout",
+        icon: "/favicon.svg?v=2",
+      });
+      n.onclick = () => {
+        window.focus();
+        if (messageId) router.push(`/messages/${messageId}`);
+        n.close();
+      };
+      return;
+    }
+
+    // Fallback: in-app toast, since native notifications aren't available
+    // or the user hasn't granted permission yet.
+    if (soundEnabled) playBeep();
+    const toastId = `${messageId || "toast"}-${Date.now()}`;
+    setToasts((prev) => [...prev, { id: toastId, messageId, title }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== toastId));
+    }, 6000);
+  }
 
   useEffect(() => {
     const stored = typeof window !== "undefined" && window.localStorage.getItem("notif_sound");
@@ -143,7 +187,6 @@ export function NotificationsProvider({ children }) {
         },
         async (payload) => {
           setUnreadCount((c) => c + 1);
-          if (soundEnabled) playBeep();
 
           const { data: msg } = await supabase
             .from("site_messages")
@@ -152,14 +195,7 @@ export function NotificationsProvider({ children }) {
             .single();
 
           if (msg) {
-            const toastId = `${payload.new.id}-${Date.now()}`;
-            setToasts((prev) => [
-              ...prev,
-              { id: toastId, messageId: msg.id, title: msg.title, topic: msg.topic },
-            ]);
-            setTimeout(() => {
-              setToasts((prev) => prev.filter((t) => t.id !== toastId));
-            }, 6000);
+            notify(msg.title, "New message on PC Scout", msg.id);
           }
         }
       )
@@ -168,7 +204,8 @@ export function NotificationsProvider({ children }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, soundEnabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, soundEnabled, notifPermission]);
 
   // Used by the message detail page instead of updating Supabase directly,
   // so the nav badge count stays in sync the moment something is read.
@@ -195,24 +232,23 @@ export function NotificationsProvider({ children }) {
     if (toast.messageId) router.push(`/messages/${toast.messageId}`);
   }
 
-  // Fires a local-only toast + sound with no database round trip — a
-  // quick way to confirm notifications are actually working on this
-  // device/browser.
+  // Confirms notifications are actually working on this device/browser —
+  // fires a real OS notification if permitted, otherwise the in-app toast.
   function sendTestPing() {
-    if (soundEnabled) playBeep();
-    const toastId = `test-${Date.now()}`;
-    setToasts((prev) => [
-      ...prev,
-      { id: toastId, messageId: null, title: "Test ping — notifications are working!" },
-    ]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== toastId));
-    }, 6000);
+    notify("Test ping", "Notifications are working!", null);
   }
 
   return (
     <NotificationsContext.Provider
-      value={{ unreadCount, markMessageRead, soundEnabled, setSoundEnabled, sendTestPing }}
+      value={{
+        unreadCount,
+        markMessageRead,
+        soundEnabled,
+        setSoundEnabled,
+        sendTestPing,
+        notifPermission,
+        requestNotifPermission,
+      }}
     >
       {children}
 

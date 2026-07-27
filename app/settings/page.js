@@ -2,14 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, ExternalLink, LogOut, User, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellOff, BellRing, ExternalLink, LogOut, User, Volume2, VolumeX } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
 import { useNotifications } from "@/components/NotificationsProvider";
 
 export default function SettingsPage() {
   const { user, profile, signOut, refreshProfile } = useAuth();
-  const { soundEnabled, setSoundEnabled, sendTestPing } = useNotifications();
+  const {
+    soundEnabled,
+    setSoundEnabled,
+    sendTestPing,
+    notifPermission,
+    requestNotifPermission,
+  } = useNotifications();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -85,13 +91,52 @@ export default function SettingsPage() {
         <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
           Notifications
         </h2>
+
+        <div className="mb-2 flex items-center justify-between rounded-lg bg-graphite-800/60 px-3 py-2.5 text-sm text-graphite-300">
+          <span className="flex items-center gap-2">
+            {notifPermission === "granted" ? (
+              <BellRing size={16} className="text-signal-green" />
+            ) : notifPermission === "denied" ? (
+              <BellOff size={16} className="text-signal-red" />
+            ) : (
+              <Bell size={16} />
+            )}
+            Browser notifications
+          </span>
+
+          {notifPermission === "granted" && (
+            <span className="text-xs font-semibold text-signal-green">Enabled</span>
+          )}
+          {notifPermission === "denied" && (
+            <span className="text-xs text-graphite-500">
+              Blocked — allow it in your browser&rsquo;s site settings
+            </span>
+          )}
+          {notifPermission === "default" && (
+            <button
+              onClick={requestNotifPermission}
+              className="rounded-lg bg-trace-500/15 px-3 py-1.5 text-xs font-semibold text-trace-400 ring-1 ring-trace-500/40 hover:bg-trace-500/25"
+            >
+              Enable
+            </button>
+          )}
+          {notifPermission === "unsupported" && (
+            <span className="text-xs text-graphite-500">Not supported in this browser</span>
+          )}
+        </div>
+        <p className="mb-3 text-[11px] text-graphite-600">
+          When enabled, new messages show a real notification from your browser/OS — even if this
+          tab isn&rsquo;t open. Without it, you&rsquo;ll still get an in-page popup while the tab
+          is open.
+        </p>
+
         <button
           onClick={() => setSoundEnabled(!soundEnabled)}
           className="flex w-full items-center justify-between rounded-lg bg-graphite-800/60 px-3 py-2.5 text-sm text-graphite-300 hover:bg-graphite-800"
         >
           <span className="flex items-center gap-2">
             {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-            Play a sound for new messages
+            Play a sound for in-page popups
           </span>
           <span
             className={`relative h-5 w-9 shrink-0 rounded-full transition ${
