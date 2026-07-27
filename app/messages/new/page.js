@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Users } from "lucide-react";
+import { Loader2, Send, Sparkles, Users } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
 import { MARKETPLACES } from "@/lib/constants";
@@ -25,6 +25,7 @@ export default function NewMessagePage() {
   const [selectedUserIds, setSelectedUserIds] = useState(new Set());
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [fetchingListing, setFetchingListing] = useState(false);
 
   // Message Seller specific fields
   const [msMarketplace, setMsMarketplace] = useState(MARKETPLACES[0]);
@@ -54,8 +55,6 @@ export default function NewMessagePage() {
       .then(({ data }) => setOtherUsers(data || []));
   }, [user]);
 
-  // Sharing a build only makes sense to specific people — default the
-  // audience picker there, but it's still changeable.
   useEffect(() => {
     if (isShareBuild) setAudience("specific");
   }, [isShareBuild]);
@@ -67,6 +66,34 @@ export default function NewMessagePage() {
       else next.add(id);
       return next;
     });
+  }
+
+  // Best-effort — reads the listing's public link-preview metadata. Works
+  // for plenty of sites, but Facebook Marketplace usually requires being
+  // logged in to view, so this often can't get real listing details from
+  // an FB link specifically. Seller name/location are never available this
+  // way at all — Facebook doesn't expose those publicly.
+  async function handleFetchListing() {
+    if (!msListingUrl.trim()) return;
+    setFetchingListing(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/fetch-listing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: msListingUrl.trim() }),
+      });
+      const data = await res.json();
+      if (data?.error) throw new Error(data.error);
+
+      if (data.title) setTitle(data.title);
+      if (data.description) setDescription(data.description);
+      if (data.price != null) setMsListingPrice(String(data.price));
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setFetchingListing(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -102,8 +129,6 @@ export default function NewMessagePage() {
     setSaving(true);
     setErrorMsg("");
 
-    // Message Seller gets a structured metadata shape, seeded with the
-    // negotiation timeline's first entry — Step 9 renders and advances this.
     const metadata = isMessageSeller
       ? {
           marketplace: msMarketplace,
@@ -230,8 +255,8 @@ export default function NewMessagePage() {
         </div>
 
         {isMessageSeller && (
-          <div className="lg:col-span-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-400">
+          <div className="lg:col-span-2 rounded-lg border border-blue-500/40 bg-blue-500/10 p-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-blue-300">
               Message Seller details
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -251,15 +276,29 @@ export default function NewMessagePage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs text-graphite-500">Listing URL</label>
-                <input
-                  value={msListingUrl}
-                  onChange={(e) => setMsListingUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
-                />
+                <div className="flex gap-2">
+                  <input
+                    value={msListingUrl}
+                    onChange={(e) => setMsListingUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="min-w-0 flex-1 rounded-lg border border-graphite-700 bg-graphite-800 px-3 py-2 text-sm text-white placeholder:text-graphite-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleFetchListing}
+                    disabled={!msListingUrl.trim() || fetchingListing}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-500/20 px-3 py-2 text-xs font-semibold text-blue-300 ring-1 ring-blue-500/50 transition hover:bg-blue-500/30 disabled:opacity-50"
+                  >
+                    {fetchingListing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                    Auto-fill
+                  </button>
+                </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-graphite-500">Seller name</label>
+                <label className="mb-1 block text-xs text-graphite-500">
+                  Seller name{" "}
+                  <span className="text-graphite-600">(usually needs manual entry)</span>
+                </label>
                 <input
                   value={msSellerName}
                   onChange={(e) => setMsSellerName(e.target.value)}
@@ -267,7 +306,10 @@ export default function NewMessagePage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-graphite-500">Seller location</label>
+                <label className="mb-1 block text-xs text-graphite-500">
+                  Seller location{" "}
+                  <span className="text-graphite-600">(usually needs manual entry)</span>
+                </label>
                 <input
                   value={msSellerLocation}
                   onChange={(e) => setMsSellerLocation(e.target.value)}
@@ -321,8 +363,9 @@ export default function NewMessagePage() {
               </div>
             </div>
             <p className="mt-3 text-[11px] text-graphite-600">
-              This automatically starts a negotiation timeline on the message, beginning with
-              &ldquo;Is this still available?&rdquo;
+              Auto-fill reads public link-preview data — it works for plenty of sites but often
+              can&rsquo;t get real details from Facebook Marketplace specifically, since that
+              usually requires being logged in to view.
             </p>
           </div>
         )}

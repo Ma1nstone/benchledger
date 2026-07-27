@@ -10,6 +10,7 @@ const NotificationsContext = createContext({
   markMessageRead: async () => {},
   soundEnabled: true,
   setSoundEnabled: () => {},
+  sendTestPing: () => {},
 });
 
 const BASE_TITLE = "PC Scout";
@@ -191,11 +192,28 @@ export function NotificationsProvider({ children }) {
 
   function goToToast(toast) {
     dismissToast(toast.id);
-    router.push(`/messages/${toast.messageId}`);
+    if (toast.messageId) router.push(`/messages/${toast.messageId}`);
+  }
+
+  // Fires a local-only toast + sound with no database round trip — a
+  // quick way to confirm notifications are actually working on this
+  // device/browser.
+  function sendTestPing() {
+    if (soundEnabled) playBeep();
+    const toastId = `test-${Date.now()}`;
+    setToasts((prev) => [
+      ...prev,
+      { id: toastId, messageId: null, title: "Test ping — notifications are working!" },
+    ]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== toastId));
+    }, 6000);
   }
 
   return (
-    <NotificationsContext.Provider value={{ unreadCount, markMessageRead, soundEnabled, setSoundEnabled }}>
+    <NotificationsContext.Provider
+      value={{ unreadCount, markMessageRead, soundEnabled, setSoundEnabled, sendTestPing }}
+    >
       {children}
 
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2">
@@ -208,7 +226,7 @@ export function NotificationsProvider({ children }) {
             <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-trace-400" />
             <span className="min-w-0 flex-1">
               <span className="block text-xs font-semibold uppercase tracking-wide text-trace-400">
-                New message
+                {t.messageId ? "New message" : "Test"}
               </span>
               <span className="block truncate text-sm text-white">{t.title}</span>
             </span>

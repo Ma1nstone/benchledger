@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ExternalLink, LogOut, User, Volume2, VolumeX } from "lucide-react";
+import { Bell, ExternalLink, LogOut, User, Volume2, VolumeX } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/components/AuthProvider";
 import { useNotifications } from "@/components/NotificationsProvider";
 
 export default function SettingsPage() {
   const { user, profile, signOut, refreshProfile } = useAuth();
-  const { soundEnabled, setSoundEnabled } = useNotifications();
+  const { soundEnabled, setSoundEnabled, sendTestPing } = useNotifications();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -104,6 +104,14 @@ export default function SettingsPage() {
               }`}
             />
           </span>
+        </button>
+
+        <button
+          onClick={sendTestPing}
+          className="mt-2 flex w-full items-center gap-2 rounded-lg bg-graphite-800/60 px-3 py-2.5 text-sm text-graphite-300 hover:bg-graphite-800"
+        >
+          <Bell size={16} />
+          Send test notification
         </button>
       </div>
 

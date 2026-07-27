@@ -25,7 +25,7 @@ export default function PartsPage() {
 
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [marketplaceFilter, setMarketplaceFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("Unused");
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
