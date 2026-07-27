@@ -5,7 +5,7 @@ import { NotificationsProvider } from "@/components/NotificationsProvider";
 import AuthGate from "@/components/AuthGate";
 
 export const metadata = {
-  title: "PC Scout",
+  title: "PCScout",
   description: "Track PC parts inventory, assemble builds, and manage sales.",
   icons: {
     icon: [

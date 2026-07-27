@@ -23,7 +23,7 @@ export default function AuthGate({ children }) {
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
         <h1 className="font-display text-2xl font-bold text-white">Sign in required</h1>
         <p className="max-w-sm text-sm text-graphite-500">
-          You need to sign in with Google to use PC Scout.
+          You need to sign in with Google to use PCScout.
         </p>
         <button
           onClick={signInWithGoogle}

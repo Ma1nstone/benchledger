@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Terms of Service — PC Scout",
+  title: "Terms of Service — PCScout",
 };
 
 export default function TermsPage() {
@@ -10,13 +10,13 @@ export default function TermsPage() {
 
       <div className="mt-6 flex flex-col gap-4 text-sm leading-relaxed text-graphite-300">
         <p>
-          By using PC Scout ("the app"), you agree to the following terms. If you do not agree,
+          By using PCScout ("the app"), you agree to the following terms. If you do not agree,
           please do not use the app.
         </p>
 
         <h2 className="mt-4 font-display text-base font-semibold text-white">What the app does</h2>
         <p>
-          PC Scout is a tool for tracking PC parts inventory, assembling builds, estimating
+          PCScout is a tool for tracking PC parts inventory, assembling builds, estimating
           resale value, and managing sales. It is provided as-is for personal use.
         </p>
 

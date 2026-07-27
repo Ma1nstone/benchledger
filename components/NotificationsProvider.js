@@ -13,7 +13,7 @@ const NotificationsContext = createContext({
   sendTestPing: () => {},
 });
 
-const BASE_TITLE = "PC Scout";
+const BASE_TITLE = "PCScout";
 const BASE_FAVICON = "/favicon.svg?v=2";
 
 // A short beep generated on the fly — no audio file needed.

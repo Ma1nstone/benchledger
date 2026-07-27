@@ -30,7 +30,7 @@ export default function Nav() {
             <Cpu size={18} />
           </span>
           <span className="font-display text-lg font-semibold tracking-tight text-white">
-            PC Scout
+            PCScout
           </span>
         </Link>
 

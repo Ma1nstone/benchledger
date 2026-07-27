@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Privacy Policy — PC Scout",
+  title: "Privacy Policy — PCScout",
 };
 
 export default function PrivacyPage() {
@@ -10,7 +10,7 @@ export default function PrivacyPage() {
 
       <div className="mt-6 flex flex-col gap-4 text-sm leading-relaxed text-graphite-300">
         <p>
-          PC Scout ("the app") is a personal inventory and resale-tracking tool. This page
+          PCScout ("the app") is a personal inventory and resale-tracking tool. This page
           explains what information the app collects and how it is used.
         </p>
 
