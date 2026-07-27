@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Clock, MapPin, X } from "lucide-react";
+import { Check, Clock, MapPin, RefreshCw, X } from "lucide-react";
 import { formatPrice } from "@/lib/constants";
 
 const STATUS_STYLES = {
@@ -55,8 +55,9 @@ function StatusBadge({ status }) {
 // the negotiation can advance it.
 //
 // onUpdate(newNegotiationArray, acceptedAmount) — acceptedAmount is only
-// non-null the moment an offer/counter offer is accepted, so the parent
-// can sync it onto the linked build.
+// non-null the moment an offer/counter offer is accepted (or when the
+// manual re-sync button is used), so the parent can sync it onto the
+// linked build.
 export default function MessageSellerTimeline({ message, canInteract, onUpdate, onSaveCollection }) {
   const negotiation = message.metadata?.negotiation || [];
   const counterOfferAmount = message.metadata?.counter_offer;
@@ -64,10 +65,14 @@ export default function MessageSellerTimeline({ message, canInteract, onUpdate, 
   const [collectionDate, setCollectionDate] = useState(message.metadata?.collection?.date || "");
   const [collectionTime, setCollectionTime] = useState(message.metadata?.collection?.time || "");
   const [savingCollection, setSavingCollection] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
-  const hasAcceptedOffer = negotiation.some(
+  const acceptedEntry = negotiation.find(
     (e) => (e.type === "offer" || e.type === "counter_offer") && e.status === "accepted"
   );
+  const hasAcceptedOffer = Boolean(acceptedEntry);
+  const buildPriceOutOfSync =
+    hasAcceptedOffer && message.linked_build_id && message.linked_build?.accepted_price !== acceptedEntry.amount;
 
   function handleMarkReplied(entryId) {
     const updated = negotiation.map((e) => (e.id === entryId ? { ...e, status: "replied" } : e));
@@ -93,6 +98,13 @@ export default function MessageSellerTimeline({ message, canInteract, onUpdate, 
       });
     }
     onUpdate(updated, decision === "accepted" ? amount : null);
+  }
+
+  async function handleResync() {
+    if (!acceptedEntry) return;
+    setSyncing(true);
+    await onUpdate(negotiation, acceptedEntry.amount);
+    setSyncing(false);
   }
 
   async function handleSaveCollection() {
@@ -156,6 +168,17 @@ export default function MessageSellerTimeline({ message, canInteract, onUpdate, 
           );
         })}
       </div>
+
+      {buildPriceOutOfSync && canInteract && (
+        <button
+          onClick={handleResync}
+          disabled={syncing}
+          className="mt-3 flex items-center gap-1.5 text-xs text-trace-400 hover:underline disabled:opacity-60"
+        >
+          <RefreshCw size={12} className={syncing ? "animate-spin" : ""} />
+          {syncing ? "Syncing…" : `Push accepted price (${formatPrice(acceptedEntry.amount)}) to linked build`}
+        </button>
+      )}
 
       {hasAcceptedOffer && (
         <div className="mt-4 rounded-lg border border-signal-green/30 bg-signal-green/5 p-3">
