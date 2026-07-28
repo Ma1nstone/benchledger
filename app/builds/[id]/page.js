@@ -51,6 +51,11 @@ export default function BuildDetailPage() {
     setName(buildData.name);
     setLink(buildData.link || "");
     setListingPrice(buildData.listing_price != null ? String(buildData.listing_price) : "");
+    // Convenience: if a negotiated offer was already accepted, pre-fill the
+    // sale price with it — still fully editable before confirming the sale.
+    if (!buildData.sold && buildData.accepted_price != null) {
+      setSoldPrice(String(buildData.accepted_price));
+    }
     setOfferPrice(buildData.offer_price != null ? String(buildData.offer_price) : "");
     setSellPrice(buildData.sell_price != null ? String(buildData.sell_price) : "");
     setAllParts(partsData || []);
@@ -237,6 +242,12 @@ export default function BuildDetailPage() {
   // sell_price is only ever set by the Estimate tool, so its presence is
   // what marks this build as estimate-created.
   const isFromEstimate = build.sell_price != null;
+
+  // Always nets the negotiated accepted price against the CURRENT parts
+  // total — not the total at the moment the offer was accepted — so
+  // adding something after the fact (a replacement case, extra RAM, etc)
+  // correctly pulls this down before you finalize the sale.
+  const profitEstimate = build.accepted_price != null ? build.accepted_price - total : null;
 
   const renderCategorySection = (category) => {
     const items = assignedParts.filter((p) => p.category === category);
@@ -467,6 +478,25 @@ export default function BuildDetailPage() {
             />
           </div>
         )}
+
+        {build.accepted_price != null && (
+          <div className="rounded-lg bg-graphite-800/60 p-3">
+            <p className="text-xs text-graphite-500">
+              Profit (accepted − current parts)
+            </p>
+            <p
+              className={`mt-1 font-mono text-lg font-bold ${
+                profitEstimate >= 0 ? "text-signal-green" : "text-signal-red"
+              }`}
+            >
+              {formatPrice(profitEstimate)}
+            </p>
+            <p className="mt-1 text-[11px] text-graphite-600">
+              Recalculates as you add/remove parts below — accepted price
+              ({formatPrice(build.accepted_price)}) minus the current total.
+            </p>
+          </div>
+        )}
       </div>
 
       {errorMsg && (
@@ -506,7 +536,7 @@ export default function BuildDetailPage() {
         />
       )}
 
-      <BuildAssistant parts={assignedParts} total={total} />
+      <BuildAssistant parts={assignedParts} total={total} buildName={build.name} />
     </div>
   );
 }
