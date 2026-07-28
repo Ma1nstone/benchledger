@@ -10,6 +10,7 @@ import { usePasteImage } from "@/hooks/usePasteImage";
 import { CATEGORIES, ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 import PartPicker from "@/components/PartPicker";
 import BuildAssistant from "@/components/BuildAssistant";
+import ImageCropModal from "@/components/ImageCropModal";
 
 const OPTIONAL_CATEGORIES = CATEGORIES.filter(
   (c) => !ESSENTIAL_CATEGORIES.includes(c)
@@ -25,6 +26,7 @@ export default function BuildDetailPage() {
   const [allParts, setAllParts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pickerCategory, setPickerCategory] = useState(null);
+  const [pendingImageFile, setPendingImageFile] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [soldPrice, setSoldPrice] = useState("");
@@ -140,12 +142,19 @@ export default function BuildDetailPage() {
 
   function handleImageChange(e) {
     const file = e.target.files?.[0];
-    uploadAndSetImage(file);
+    e.target.value = ""; // allow re-selecting the same file next time
+    if (file) setPendingImageFile(file);
+  }
+
+  function handleCropped(croppedFile) {
+    setPendingImageFile(null);
+    uploadAndSetImage(croppedFile);
   }
 
   // The photo upload area is always present on this page (no modal to
   // gate it on), so paste-to-upload is enabled once the build has loaded.
-  usePasteImage(!loading && Boolean(build), uploadAndSetImage);
+  // Pasted images go through the cropper too, same as file-picked ones.
+  usePasteImage(!loading && Boolean(build), (file) => setPendingImageFile(file));
 
   function optionsFor(category) {
     return allParts.filter((p) => p.category === category && !p.build_id);
@@ -479,6 +488,14 @@ export default function BuildDetailPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {OPTIONAL_CATEGORIES.map(renderCategorySection)}
       </div>
+
+      {pendingImageFile && (
+        <ImageCropModal
+          file={pendingImageFile}
+          onCancel={() => setPendingImageFile(null)}
+          onCropped={handleCropped}
+        />
+      )}
 
       {pickerCategory && (
         <PartPicker
