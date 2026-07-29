@@ -5,6 +5,7 @@ import { CheckSquare, Layers, ListFilter, MonitorSmartphone, Plus, Square, Trash
 import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
 import { CATEGORIES, MARKETPLACES, splitEvenly } from "@/lib/constants";
+import { useAuth } from "@/components/AuthProvider";
 import SearchBar from "@/components/SearchBar";
 import NewPartForm from "@/components/NewPartForm";
 import NewBundleForm from "@/components/NewBundleForm";
@@ -15,6 +16,7 @@ import BundleCard from "@/components/BundleCard";
 const STATUS_OPTIONS = ["All", "Unused", "Used"];
 
 export default function PartsPage() {
+  const { user } = useAuth();
   const [parts, setParts] = useState([]);
   const [bundles, setBundles] = useState([]);
   const [builds, setBuilds] = useState([]);
@@ -33,13 +35,24 @@ export default function PartsPage() {
 
   async function loadData() {
     setLoading(true);
+    // Parts and bundles are now private (RLS scopes rows to their owner,
+    // or — for parts assigned to a build — to anyone that build has been
+    // shared with), so this naturally only returns what the signed-in
+    // user can actually access. The `owner` join is used to show whose
+    // part/build it is when a build has been shared with someone else.
     const [
       { data: partsData, error: partsError },
       { data: bundlesData, error: bundlesError },
       { data: buildsData },
     ] = await Promise.all([
-      supabase.from("parts").select("*").order("created_at", { ascending: false }),
-      supabase.from("bundles").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("parts")
+        .select("*, owner:profiles!owner_id(name, email)")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("bundles")
+        .select("*, owner:profiles!owner_id(name, email)")
+        .order("created_at", { ascending: false }),
       supabase.from("builds").select("id, name, sold"),
     ]);
     if (partsError) setErrorMsg(partsError.message);
@@ -60,8 +73,6 @@ export default function PartsPage() {
     return map;
   }, [builds]);
 
-  // Once a build is marked Sold, its parts disappear from the Parts page
-  // entirely (not just tagged USED) — they're done, no longer inventory.
   const soldBuildIds = useMemo(
     () => new Set(builds.filter((b) => b.sold).map((b) => b.id)),
     [builds]
@@ -87,13 +98,11 @@ export default function PartsPage() {
     return map;
   }, [visibleParts]);
 
-  // Hide a bundle entirely once every part inside it has been sold off.
   const visibleBundles = useMemo(
     () => bundles.filter((b) => (partsByBundleId[b.id] || []).length > 0),
     [bundles, partsByBundleId]
   );
 
-  // Merge standalone parts and bundles into one feed, newest first, then filter by search + filters.
   const feed = useMemo(() => {
     const partItems = standaloneParts.map((p) => ({ type: "part", data: p, created_at: p.created_at }));
     const bundleItems = visibleBundles.map((b) => ({ type: "bundle", data: b, created_at: b.created_at }));
@@ -145,8 +154,6 @@ export default function PartsPage() {
     setStatusFilter("All");
   }
 
-  // Only standalone part cards are selectable — bundles have their own
-  // delete flow since removing them cascades to their contained parts.
   const selectableIds = useMemo(
     () => feed.filter((item) => item.type === "part").map((item) => item.data.id),
     [feed]
@@ -209,8 +216,9 @@ export default function PartsPage() {
         marketplace: form.marketplace,
         link: form.link.trim() || null,
         image_url,
+        owner_id: user.id,
       })
-      .select()
+      .select("*, owner:profiles!owner_id(name, email)")
       .single();
 
     if (error) throw error;
@@ -235,8 +243,9 @@ export default function PartsPage() {
         link: form.link.trim() || null,
         status: form.status,
         image_url,
+        owner_id: user.id,
       })
-      .select()
+      .select("*, owner:profiles!owner_id(name, email)")
       .single();
 
     if (bundleError) throw bundleError;
@@ -249,12 +258,13 @@ export default function PartsPage() {
       marketplace: form.marketplace,
       link: form.link.trim() || null,
       bundle_id: bundle.id,
+      owner_id: user.id,
     }));
 
     const { data: newParts, error: partsError } = await supabase
       .from("parts")
       .insert(rows)
-      .select();
+      .select("*, owner:profiles!owner_id(name, email)");
 
     if (partsError) throw partsError;
 
@@ -271,7 +281,7 @@ export default function PartsPage() {
 
     const { data: build, error: buildError } = await supabase
       .from("builds")
-      .insert({ name: form.pcName, image_url })
+      .insert({ name: form.pcName, image_url, owner_id: user.id, source: "manual" })
       .select()
       .single();
 
@@ -287,12 +297,13 @@ export default function PartsPage() {
       marketplace: form.marketplace,
       link: form.link.trim() || null,
       build_id: build.id,
+      owner_id: user.id,
     }));
 
     const { data: newParts, error: partsError } = await supabase
       .from("parts")
       .insert(rows)
-      .select();
+      .select("*, owner:profiles!owner_id(name, email)");
 
     if (partsError) throw partsError;
 
@@ -344,7 +355,8 @@ export default function PartsPage() {
         <div className="shrink-0">
           <h1 className="font-display text-2xl font-bold text-white">Parts</h1>
           <p className="text-sm text-graphite-500">
-            Everything you&rsquo;ve bought, ready to slot into a build or flip on its own.
+            Everything you&rsquo;ve bought, ready to slot into a build or flip on its own. Only
+            visible to you, unless it&rsquo;s in a build you&rsquo;ve shared.
           </p>
         </div>
         <div className="flex flex-1 flex-wrap items-center gap-3 lg:justify-end">
@@ -504,6 +516,8 @@ export default function PartsPage() {
                 key={`part-${item.data.id}`}
                 part={item.data}
                 buildName={item.data.build_id ? buildNameById[item.data.build_id] : null}
+                ownerName={item.data.owner?.name || item.data.owner?.email}
+                showOwner={item.data.owner_id !== user?.id}
                 onDelete={handleDeletePart}
                 selectable={selectMode}
                 selected={selectedIds.has(item.data.id)}

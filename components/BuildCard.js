@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeftRight, ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2, User } from "lucide-react";
 import { ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 
-export default function BuildCard({ build, parts, onDelete, onMoveTab }) {
+export default function BuildCard({ build, parts, ownerName, showOwner, onDelete, onMoveTab }) {
   const [open, setOpen] = useState(false);
 
   const total = parts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
@@ -45,8 +45,14 @@ export default function BuildCard({ build, parts, onDelete, onMoveTab }) {
           <p className="truncate font-display font-semibold text-white">
             {build.name}
           </p>
-          <p className="text-xs text-graphite-500">
+          <p className="flex items-center gap-1.5 text-xs text-graphite-500">
             {parts.length} part{parts.length === 1 ? "" : "s"} assigned
+            {showOwner && ownerName && (
+              <span className="flex items-center gap-1 rounded-full bg-graphite-800 px-1.5 py-0.5 text-[10px] text-graphite-400 ring-1 ring-graphite-700">
+                <User size={9} />
+                {ownerName}
+              </span>
+            )}
           </p>
         </div>
 

@@ -1,9 +1,18 @@
 "use client";
 
-import { Check, ExternalLink, Trash2, Package } from "lucide-react";
+import { Check, ExternalLink, Trash2, Package, User } from "lucide-react";
 import { formatPrice } from "@/lib/constants";
 
-export default function PartCard({ part, buildName, onDelete, selectable, selected, onToggleSelect }) {
+export default function PartCard({
+  part,
+  buildName,
+  ownerName,
+  showOwner,
+  onDelete,
+  selectable,
+  selected,
+  onToggleSelect,
+}) {
   const used = Boolean(part.build_id);
   const isOffer = part.price_type === "Offer";
 
@@ -71,6 +80,12 @@ export default function PartCard({ part, buildName, onDelete, selectable, select
           {used && (
             <span className="rounded-full bg-signal-red/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-signal-red ring-1 ring-signal-red/40">
               USED{buildName ? ` — ${buildName}` : ""}
+            </span>
+          )}
+          {showOwner && ownerName && (
+            <span className="flex items-center gap-1 rounded-full bg-graphite-800 px-2 py-0.5 text-[11px] text-graphite-400 ring-1 ring-graphite-700">
+              <User size={10} />
+              {ownerName}
             </span>
           )}
         </div>

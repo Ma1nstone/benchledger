@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, Sparkles, Tag, Trash2, Wand2, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/components/AuthProvider";
 import { CATEGORIES, formatPrice } from "@/lib/constants";
 import { titleCase } from "@/lib/estimateParser";
 import { estimateRange } from "@/lib/priceReference";
 
 export default function EstimatePanel() {
   const router = useRouter();
+  const { user } = useAuth();
   const [raw, setRaw] = useState("");
   const [items, setItems] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -76,7 +78,7 @@ export default function EstimatePanel() {
   const inferredCount = items.filter((it) => it.inferred).length;
 
   async function handleAddToBuilds() {
-    if (items.length === 0) return;
+    if (items.length === 0 || !user) return;
     setSaving(true);
     setErrorMsg("");
     try {
@@ -91,6 +93,7 @@ export default function EstimatePanel() {
           offer_price: offerPrice,
           sell_price: sellPrice,
           source: "estimate",
+          owner_id: user.id,
         })
         .select()
         .single();
@@ -104,6 +107,7 @@ export default function EstimatePanel() {
         marketplace: "eBay",
         link: buildLink.trim() || null,
         build_id: build.id,
+        owner_id: user.id,
       }));
 
       const { error: partsError } = await supabase.from("parts").insert(rows);
@@ -288,7 +292,7 @@ export default function EstimatePanel() {
             </div>
             <button
               onClick={handleAddToBuilds}
-              disabled={saving}
+              disabled={saving || !user}
               className="flex items-center justify-center gap-2 rounded-lg bg-trace-500 px-4 py-2.5 text-sm font-semibold text-graphite-950 transition hover:bg-trace-400 disabled:opacity-60"
             >
               <Wrench size={16} />

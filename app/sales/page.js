@@ -8,6 +8,7 @@ import { formatPrice } from "@/lib/constants";
 export default function SalesPage() {
   const [builds, setBuilds] = useState([]);
   const [parts, setParts] = useState([]);
+  const [costGroups, setCostGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [openId, setOpenId] = useState(null);
@@ -18,17 +19,25 @@ export default function SalesPage() {
 
   async function load() {
     setLoading(true);
-    const [{ data: buildsData }, { data: partsData }] = await Promise.all([
-      supabase
-        .from("builds")
-        .select("*")
-        .eq("sold", true)
-        .is("deleted_at", null)
-        .order("sold_at", { ascending: false }),
-      supabase.from("parts").select("id, build_id, name, category, price"),
-    ]);
+    const [{ data: buildsData }, { data: partsData }, { data: costGroupsData }] =
+      await Promise.all([
+        supabase
+          .from("builds")
+          .select("*")
+          .eq("sold", true)
+          .is("deleted_at", null)
+          .order("sold_at", { ascending: false }),
+        // cost_group_id + purchase_cost are needed for the Total Purchase
+        // Cost calculation below — price stays here too since the parts
+        // breakdown still shows each part's Estimate price for reference.
+        supabase
+          .from("parts")
+          .select("id, build_id, name, category, price, cost_group_id, purchase_cost"),
+        supabase.from("cost_groups").select("*"),
+      ]);
     setBuilds(buildsData || []);
     setParts(partsData || []);
+    setCostGroups(costGroupsData || []);
     setLoading(false);
   }
 
@@ -36,8 +45,18 @@ export default function SalesPage() {
     return parts.filter((p) => p.build_id === buildId);
   }
 
-  function costFor(buildId) {
-    return partsFor(buildId).reduce((sum, p) => sum + (Number(p.price) || 0), 0);
+  // Total Purchase Cost = sum of every purchase group for this build +
+  // sum of the purchase cost of every ungrouped part in it. This is what
+  // was actually paid — completely separate from the Estimate total.
+  function totalPurchaseCostFor(buildId) {
+    const buildParts = partsFor(buildId);
+    const groupsTotal = costGroups
+      .filter((g) => g.build_id === buildId)
+      .reduce((sum, g) => sum + (Number(g.purchase_price) || 0), 0);
+    const ungroupedTotal = buildParts
+      .filter((p) => !p.cost_group_id)
+      .reduce((sum, p) => sum + (Number(p.purchase_cost) || 0), 0);
+    return groupsTotal + ungroupedTotal;
   }
 
   async function handleDelete(e, build) {
@@ -51,15 +70,13 @@ export default function SalesPage() {
 
     const { error: partsError } = await supabase
       .from("parts")
-      .update({ build_id: null })
+      .update({ build_id: null, cost_group_id: null })
       .eq("build_id", build.id);
     if (partsError) {
       setErrorMsg(partsError.message);
       return;
     }
 
-    // Soft delete: mark it deleted rather than removing the row, so an
-    // admin can still see and restore it later.
     const { error } = await supabase
       .from("builds")
       .update({ deleted_at: new Date().toISOString() })
@@ -90,7 +107,8 @@ export default function SalesPage() {
       <div className="mb-6">
         <h1 className="font-display text-2xl font-bold text-white">Sales</h1>
         <p className="text-sm text-graphite-500">
-          Builds you&rsquo;ve marked as sold, most recent first. Click a row to see what was inside.
+          Builds you&rsquo;ve marked as sold, most recent first. Profit is Sale price minus Total
+          Purchase Cost from the Costs tab — not the Estimate total.
         </p>
       </div>
 
@@ -113,8 +131,8 @@ export default function SalesPage() {
         <div className="flex flex-col gap-3">
           {builds.map((build) => {
             const buildParts = partsFor(build.id);
-            const cost = costFor(build.id);
-            const profit = (Number(build.sold_price) || 0) - cost;
+            const purchaseCost = totalPurchaseCostFor(build.id);
+            const profit = (Number(build.sold_price) || 0) - purchaseCost;
             const isOpen = openId === build.id;
 
             const grouped = buildParts.reduce((acc, p) => {
@@ -161,6 +179,12 @@ export default function SalesPage() {
                     <p className="text-xs text-graphite-500">Sold for</p>
                     <p className="font-mono text-lg font-semibold text-white">
                       {formatPrice(build.sold_price)}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs text-graphite-500">Purchase cost</p>
+                    <p className="font-mono text-lg font-semibold text-graphite-300">
+                      {formatPrice(purchaseCost)}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
@@ -227,6 +251,11 @@ export default function SalesPage() {
                           ))}
                         </div>
                       )}
+                      <p className="mt-3 text-[11px] text-graphite-600">
+                        Prices above are each part&rsquo;s Estimate value, shown for reference.
+                        Profit uses the Total Purchase Cost from this build&rsquo;s Costs tab
+                        instead.
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Check, ExternalLink, ImagePlus, Link2, Plus, X } from "lucide-react";
+import { ArrowLeft, Calculator, Check, ExternalLink, ImagePlus, Link2, Plus, Wallet, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
 import { usePasteImage } from "@/hooks/usePasteImage";
@@ -11,6 +11,7 @@ import { CATEGORIES, ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 import PartPicker from "@/components/PartPicker";
 import BuildAssistant from "@/components/BuildAssistant";
 import ImageCropModal from "@/components/ImageCropModal";
+import CostsPanel from "@/components/CostsPanel";
 
 const OPTIONAL_CATEGORIES = CATEGORIES.filter(
   (c) => !ESSENTIAL_CATEGORIES.includes(c)
@@ -24,6 +25,7 @@ export default function BuildDetailPage() {
   const [name, setName] = useState("");
   const [link, setLink] = useState("");
   const [allParts, setAllParts] = useState([]);
+  const [costGroups, setCostGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pickerCategory, setPickerCategory] = useState(null);
   const [pendingImageFile, setPendingImageFile] = useState(null);
@@ -35,13 +37,22 @@ export default function BuildDetailPage() {
   const [offerPrice, setOfferPrice] = useState("");
   const [sellPrice, setSellPrice] = useState("");
 
+  // "estimate" = the existing system, untouched. "costs" = the new,
+  // fully independent purchase-tracking system. Purely a UI toggle —
+  // neither mode ever writes to the other's fields.
+  const [pricingMode, setPricingMode] = useState("estimate");
+
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [{ data: buildData, error: buildError }, { data: partsData }] =
-      await Promise.all([
-        supabase.from("builds").select("*").eq("id", id).single(),
-        supabase.from("parts").select("*"),
-      ]);
+    const [
+      { data: buildData, error: buildError },
+      { data: partsData },
+      { data: costGroupsData },
+    ] = await Promise.all([
+      supabase.from("builds").select("*").eq("id", id).single(),
+      supabase.from("parts").select("*"),
+      supabase.from("cost_groups").select("*").eq("build_id", id),
+    ]);
     if (buildError) {
       setErrorMsg("Build not found.");
       setLoading(false);
@@ -51,14 +62,13 @@ export default function BuildDetailPage() {
     setName(buildData.name);
     setLink(buildData.link || "");
     setListingPrice(buildData.listing_price != null ? String(buildData.listing_price) : "");
-    // Convenience: if a negotiated offer was already accepted, pre-fill the
-    // sale price with it — still fully editable before confirming the sale.
     if (!buildData.sold && buildData.accepted_price != null) {
       setSoldPrice(String(buildData.accepted_price));
     }
     setOfferPrice(buildData.offer_price != null ? String(buildData.offer_price) : "");
     setSellPrice(buildData.sell_price != null ? String(buildData.sell_price) : "");
     setAllParts(partsData || []);
+    setCostGroups(costGroupsData || []);
     setLoading(false);
   }, [id]);
 
@@ -70,8 +80,8 @@ export default function BuildDetailPage() {
     () => allParts.filter((p) => p.build_id === id),
     [allParts, id]
   );
-  // This total always reflects whatever parts are currently assigned —
-  // it's never a typed-in value, only the parts inside can change it.
+  // Estimate total — always the sum of parts.price, exactly as before.
+  // The Costs system never touches this.
   const total = assignedParts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
   const complete = ESSENTIAL_CATEGORIES.every((cat) =>
     assignedParts.some((p) => p.category === cat)
@@ -147,7 +157,7 @@ export default function BuildDetailPage() {
 
   function handleImageChange(e) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file next time
+    e.target.value = "";
     if (file) setPendingImageFile(file);
   }
 
@@ -156,9 +166,6 @@ export default function BuildDetailPage() {
     uploadAndSetImage(croppedFile);
   }
 
-  // The photo upload area is always present on this page (no modal to
-  // gate it on), so paste-to-upload is enabled once the build has loaded.
-  // Pasted images go through the cropper too, same as file-picked ones.
   usePasteImage(!loading && Boolean(build), (file) => setPendingImageFile(file));
 
   function optionsFor(category) {
@@ -183,25 +190,25 @@ export default function BuildDetailPage() {
   async function removePart(part) {
     const { error } = await supabase
       .from("parts")
-      .update({ build_id: null })
+      // Leaving a build also clears any purchase-group membership — a
+      // cost group only makes sense for parts actually inside this build.
+      .update({ build_id: null, cost_group_id: null })
       .eq("id", part.id);
     if (error) {
       setErrorMsg(error.message);
       return;
     }
     setAllParts((prev) =>
-      prev.map((p) => (p.id === part.id ? { ...p, build_id: null } : p))
+      prev.map((p) => (p.id === part.id ? { ...p, build_id: null, cost_group_id: null } : p))
     );
   }
 
-  // Live-updates the part in local state as the person types.
   function updatePartField(partId, field, value) {
     setAllParts((prev) =>
       prev.map((p) => (p.id === partId ? { ...p, [field]: value } : p))
     );
   }
 
-  // Persists whatever is currently in state for that part/field on blur.
   async function savePartField(partId, field) {
     const part = allParts.find((p) => p.id === partId);
     if (!part) return;
@@ -239,15 +246,7 @@ export default function BuildDetailPage() {
       </div>
     );
 
-  // sell_price is only ever set by the Estimate tool, so its presence is
-  // what marks this build as estimate-created.
   const isFromEstimate = build.sell_price != null;
-
-  // Always nets the negotiated accepted price against the CURRENT parts
-  // total — not the total at the moment the offer was accepted — so
-  // adding something after the fact (a replacement case, extra RAM, etc)
-  // correctly pulls this down before you finalize the sale.
-  const profitEstimate = build.accepted_price != null ? build.accepted_price - total : null;
 
   const renderCategorySection = (category) => {
     const items = assignedParts.filter((p) => p.category === category);
@@ -425,8 +424,11 @@ export default function BuildDetailPage() {
       {/* Pricing: total is always the sum of parts below and can't be typed
           into directly. Listing price and offer price are editable on every
           build. Sell price only appears on builds that came from the
-          Estimate tool. */}
-      <div className="mb-6 grid grid-cols-1 gap-3 rounded-xl border border-graphite-700 bg-graphite-900 p-4 sm:grid-cols-4">
+          Estimate tool. Profit is deliberately NOT shown here anymore — it
+          only appears on the Sales page, once a build is sold, calculated
+          from Total Purchase Cost (Costs mode) rather than these estimate
+          figures. */}
+      <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-graphite-700 bg-graphite-900 p-4 sm:grid-cols-4">
         <div className="rounded-lg bg-graphite-800/60 p-3">
           <p className="text-xs text-graphite-500">Estimate (sum of parts)</p>
           <p className="mt-1 font-mono text-lg font-bold text-white">{formatPrice(total)}</p>
@@ -478,25 +480,32 @@ export default function BuildDetailPage() {
             />
           </div>
         )}
+      </div>
 
-        {build.accepted_price != null && (
-          <div className="rounded-lg bg-graphite-800/60 p-3">
-            <p className="text-xs text-graphite-500">
-              Profit (accepted − current parts)
-            </p>
-            <p
-              className={`mt-1 font-mono text-lg font-bold ${
-                profitEstimate >= 0 ? "text-signal-green" : "text-signal-red"
-              }`}
-            >
-              {formatPrice(profitEstimate)}
-            </p>
-            <p className="mt-1 text-[11px] text-graphite-600">
-              Recalculates as you add/remove parts below — accepted price
-              ({formatPrice(build.accepted_price)}) minus the current total.
-            </p>
-          </div>
-        )}
+      {/* Estimate / Costs switch — two fully independent views. */}
+      <div className="mb-6 flex w-fit gap-1 rounded-full border border-graphite-700 bg-graphite-900 p-1">
+        <button
+          onClick={() => setPricingMode("estimate")}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition ${
+            pricingMode === "estimate"
+              ? "bg-trace-500/15 text-trace-400 ring-1 ring-trace-500/40"
+              : "text-graphite-500 hover:text-white"
+          }`}
+        >
+          <Calculator size={14} />
+          Estimate
+        </button>
+        <button
+          onClick={() => setPricingMode("costs")}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition ${
+            pricingMode === "costs"
+              ? "bg-trace-500/15 text-trace-400 ring-1 ring-trace-500/40"
+              : "text-graphite-500 hover:text-white"
+          }`}
+        >
+          <Wallet size={14} />
+          Costs
+        </button>
       </div>
 
       {errorMsg && (
@@ -505,19 +514,31 @@ export default function BuildDetailPage() {
         </p>
       )}
 
-      <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
-        Essential parts
-      </h2>
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {ESSENTIAL_CATEGORIES.map(renderCategorySection)}
-      </div>
+      {pricingMode === "estimate" ? (
+        <>
+          <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
+            Essential parts
+          </h2>
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {ESSENTIAL_CATEGORIES.map(renderCategorySection)}
+          </div>
 
-      <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
-        Optional parts
-      </h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {OPTIONAL_CATEGORIES.map(renderCategorySection)}
-      </div>
+          <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
+            Optional parts
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {OPTIONAL_CATEGORIES.map(renderCategorySection)}
+          </div>
+        </>
+      ) : (
+        <CostsPanel
+          buildId={id}
+          parts={assignedParts}
+          costGroups={costGroups}
+          onRefresh={loadData}
+          onError={setErrorMsg}
+        />
+      )}
 
       {pendingImageFile && (
         <ImageCropModal

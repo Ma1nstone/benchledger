@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/components/AuthProvider";
 import BuildCard from "@/components/BuildCard";
 
 const SUBTABS = [
@@ -13,6 +14,7 @@ const SUBTABS = [
 
 export default function BuildsPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [builds, setBuilds] = useState([]);
   const [parts, setParts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,11 +24,13 @@ export default function BuildsPage() {
 
   async function loadData() {
     setLoading(true);
+    // RLS already scopes this to builds you own or that have been shared
+    // with you (plus everything, for admins) — no extra filtering needed.
     const [{ data: buildsData, error: buildsError }, { data: partsData }] =
       await Promise.all([
         supabase
           .from("builds")
-          .select("*")
+          .select("*, owner:profiles!owner_id(name, email)")
           .eq("sold", false)
           .is("deleted_at", null)
           .order("created_at", { ascending: false }),
@@ -51,7 +55,7 @@ export default function BuildsPage() {
     setCreating(true);
     const { data, error } = await supabase
       .from("builds")
-      .insert({ name: "New Build", source: "manual" })
+      .insert({ name: "New Build", source: "manual", owner_id: user.id })
       .select()
       .single();
     setCreating(false);
@@ -72,7 +76,7 @@ export default function BuildsPage() {
 
     const { error: partsError } = await supabase
       .from("parts")
-      .update({ build_id: null })
+      .update({ build_id: null, cost_group_id: null })
       .eq("build_id", build.id);
     if (partsError) {
       setErrorMsg(partsError.message);
@@ -109,7 +113,8 @@ export default function BuildsPage() {
         <div>
           <h1 className="font-display text-2xl font-bold text-white">Builds</h1>
           <p className="text-sm text-graphite-500">
-            Click a build to expand it. Green means every essential slot is filled.
+            Click a build to expand it. Green means every essential slot is filled. Only builds
+            you own or that have been shared with you show up here.
           </p>
         </div>
         <button
@@ -161,6 +166,8 @@ export default function BuildsPage() {
               key={build.id}
               build={build}
               parts={parts.filter((p) => p.build_id === build.id)}
+              ownerName={build.owner?.name || build.owner?.email}
+              showOwner={build.owner_id !== user?.id}
               onDelete={handleDelete}
               onMoveTab={handleMoveTab}
             />
