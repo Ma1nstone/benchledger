@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/request';
 
 // Replace this with your actual public IP address
 const ALLOWED_IP = '104.28.161.159'; 
 
-export function middleware(request: NextRequest) {
+export function middleware(request) {
   // Extract the client's IP from Vercel's forwarding header
   const clientIp = request.headers.get('x-forwarded-for') || request.ip;
 
