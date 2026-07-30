@@ -19,6 +19,7 @@ export default function MessageDetailPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [accepting, setAccepting] = useState(false);
+  const [justAccepted, setJustAccepted] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,11 +49,6 @@ export default function MessageDetailPage() {
     load();
   }, [load]);
 
-  // acceptedAmount is only set the moment an offer/counter offer gets
-  // accepted (or when manually re-triggered) — when that happens (and a
-  // build is linked), sync the price onto that build. Uses the flat
-  // message.linked_build_id (always reliable) rather than the embedded
-  // linked_build.id, and surfaces any failure instead of failing silently.
   async function handleNegotiationUpdate(newNegotiation, acceptedAmount) {
     const newMetadata = { ...message.metadata, negotiation: newNegotiation };
     const { error } = await supabase
@@ -102,22 +98,25 @@ export default function MessageDetailPage() {
     setMessage((m) => ({ ...m, metadata: newMetadata }));
   }
 
+  // Before accepting, RLS correctly hides the linked build from us (we're
+  // not the owner and not in shared_user_ids yet), so message.linked_build
+  // comes back null. It used to get manually patched here — but patching
+  // a null object loses the build's real id/name/owner_id, which broke
+  // the "Open build" link and left the page not actually reflecting the
+  // new access. Instead, just refetch: now that the RPC has added us to
+  // shared_user_ids, RLS will return the real build data this time.
   async function handleAcceptShare() {
     setAccepting(true);
     setErrorMsg("");
     const { error } = await supabase.rpc("accept_build_share", { message_id: message.id });
-    setAccepting(false);
     if (error) {
+      setAccepting(false);
       setErrorMsg(error.message);
       return;
     }
-    setMessage((m) => ({
-      ...m,
-      linked_build: {
-        ...m.linked_build,
-        shared_user_ids: [...(m.linked_build.shared_user_ids || []), user.id],
-      },
-    }));
+    await load();
+    setAccepting(false);
+    setJustAccepted(true);
   }
 
   if (loading) return <p className="text-sm text-graphite-500">Loading message…</p>;
@@ -241,13 +240,22 @@ export default function MessageDetailPage() {
           />
         )}
 
-        {isShareBuild && message.linked_build && (
+        {isShareBuild && (
           <div className="mt-5 rounded-lg border border-signal-amber/30 bg-signal-amber/5 p-4">
             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-signal-amber">
               <Wrench size={12} />
               Shared build
             </p>
-            <p className="text-sm text-white">{message.linked_build.name}</p>
+
+            {justAccepted && hasBuildAccess && (
+              <p className="mb-2 text-xs text-signal-green">
+                You now have full access — parts, purchase costs, everything on this build.
+              </p>
+            )}
+
+            <p className="text-sm text-white">
+              {message.linked_build?.name || "This build"}
+            </p>
 
             {hasBuildAccess ? (
               <Link
