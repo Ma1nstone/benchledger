@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Calculator, Check, ExternalLink, ImagePlus, Link2, Plus, Ungroup, Wallet, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -20,6 +20,7 @@ const OPTIONAL_CATEGORIES = CATEGORIES.filter(
 export default function BuildDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [build, setBuild] = useState(null);
   const [name, setName] = useState("");
@@ -40,15 +41,28 @@ export default function BuildDetailPage() {
   const [pricingMode, setPricingMode] = useState("estimate");
   const modeInitialized = useRef(false);
 
-  // Selection for grouping in Costs mode — lives here (not in CostsPanel)
-  // because selectable rows are rendered inline in the category grid,
-  // shared with Estimate mode.
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [costsBusy, setCostsBusy] = useState(false);
 
-  // Fetches everything. `silent` skips the loading-spinner swap so edits
-  // made from Costs mode (group price, purchase cost, etc.) just update
-  // the data in place instead of unmounting the whole page.
+  // --- Auto-delete-if-untouched -------------------------------------------
+  // Only builds opened straight from the "New build" button carry ?new=1.
+  // If the person leaves this page without a single change taking effect,
+  // the empty shell that was created to get them here is removed instead
+  // of sitting in the list forever as an empty "New Build" entry.
+  const isNewBuildRef = useRef(searchParams.get("new") === "1");
+  const dirtyRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (isNewBuildRef.current && !dirtyRef.current) {
+        // Page is unmounting (navigated away) — fire-and-forget delete,
+        // nothing left to await or show an error for at this point.
+        supabase.from("builds").delete().eq("id", id).then(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   const fetchAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     const [
@@ -80,9 +94,6 @@ export default function BuildDetailPage() {
     setCostGroups(costGroupsData || []);
     if (!silent) setLoading(false);
 
-    // Default the Estimate/Costs switch to Costs once a build is sold
-    // (only the first time data loads, so it doesn't fight with the
-    // person manually flipping it back while they're on the page).
     if (!modeInitialized.current) {
       modeInitialized.current = true;
       setPricingMode(buildData.sold ? "costs" : "estimate");
@@ -100,8 +111,6 @@ export default function BuildDetailPage() {
     () => allParts.filter((p) => p.build_id === id),
     [allParts, id]
   );
-  // Estimate total — always the sum of parts.price. The Costs system
-  // never reads or writes this.
   const total = assignedParts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
   const complete = ESSENTIAL_CATEGORIES.every((cat) =>
     assignedParts.some((p) => p.category === cat)
@@ -136,7 +145,10 @@ export default function BuildDetailPage() {
     const { error } = await supabase.from("builds").update({ name }).eq("id", id);
     setSaving(false);
     if (error) setErrorMsg(error.message);
-    else setBuild((b) => ({ ...b, name }));
+    else {
+      setBuild((b) => ({ ...b, name }));
+      dirtyRef.current = true;
+    }
   }
 
   async function saveLink() {
@@ -147,7 +159,10 @@ export default function BuildDetailPage() {
     const { error } = await supabase.from("builds").update({ link: value }).eq("id", id);
     setSaving(false);
     if (error) setErrorMsg(error.message);
-    else setBuild((b) => ({ ...b, link: value }));
+    else {
+      setBuild((b) => ({ ...b, link: value }));
+      dirtyRef.current = true;
+    }
   }
 
   async function saveListingPrice() {
@@ -158,7 +173,10 @@ export default function BuildDetailPage() {
     const { error } = await supabase.from("builds").update({ listing_price: value }).eq("id", id);
     setSaving(false);
     if (error) setErrorMsg(error.message);
-    else setBuild((b) => ({ ...b, listing_price: value }));
+    else {
+      setBuild((b) => ({ ...b, listing_price: value }));
+      dirtyRef.current = true;
+    }
   }
 
   async function saveOfferPrice() {
@@ -169,7 +187,10 @@ export default function BuildDetailPage() {
     const { error } = await supabase.from("builds").update({ offer_price: value }).eq("id", id);
     setSaving(false);
     if (error) setErrorMsg(error.message);
-    else setBuild((b) => ({ ...b, offer_price: value }));
+    else {
+      setBuild((b) => ({ ...b, offer_price: value }));
+      dirtyRef.current = true;
+    }
   }
 
   async function saveSellPrice() {
@@ -180,7 +201,10 @@ export default function BuildDetailPage() {
     const { error } = await supabase.from("builds").update({ sell_price: value }).eq("id", id);
     setSaving(false);
     if (error) setErrorMsg(error.message);
-    else setBuild((b) => ({ ...b, sell_price: value }));
+    else {
+      setBuild((b) => ({ ...b, sell_price: value }));
+      dirtyRef.current = true;
+    }
   }
 
   async function uploadAndSetImage(file) {
@@ -191,6 +215,7 @@ export default function BuildDetailPage() {
       const { error } = await supabase.from("builds").update({ image_url }).eq("id", id);
       if (error) throw error;
       setBuild((b) => ({ ...b, image_url }));
+      dirtyRef.current = true;
     } catch (err) {
       setErrorMsg(err.message);
     } finally {
@@ -227,6 +252,7 @@ export default function BuildDetailPage() {
     setAllParts((prev) =>
       prev.map((p) => (p.id === part.id ? { ...p, build_id: id } : p))
     );
+    dirtyRef.current = true;
     setPickerCategory(null);
   }
 
@@ -262,6 +288,7 @@ export default function BuildDetailPage() {
     const value = field === "price" ? Number(part.price) || 0 : (part.name || "").trim();
     const { error } = await supabase.from("parts").update({ [field]: value }).eq("id", partId);
     if (error) setErrorMsg(error.message);
+    else dirtyRef.current = true;
   }
 
   async function markAsSold() {
@@ -279,6 +306,7 @@ export default function BuildDetailPage() {
       setErrorMsg(error.message);
       return;
     }
+    dirtyRef.current = true;
     router.push("/sales");
   }
 
@@ -319,6 +347,7 @@ export default function BuildDetailPage() {
         .in("id", Array.from(selectedIds));
       if (partsError) throw partsError;
 
+      dirtyRef.current = true;
       clearSelection();
       await refresh();
     } catch (err) {
@@ -337,6 +366,7 @@ export default function BuildDetailPage() {
         .update({ cost_group_id: groupId })
         .in("id", Array.from(selectedIds));
       if (error) throw error;
+      dirtyRef.current = true;
       clearSelection();
       await refresh();
     } catch (err) {
@@ -354,6 +384,7 @@ export default function BuildDetailPage() {
         .update({ cost_group_id: null })
         .eq("id", partId);
       if (error) throw error;
+      dirtyRef.current = true;
       await refresh();
     } catch (err) {
       setErrorMsg(err.message);
@@ -368,6 +399,7 @@ export default function BuildDetailPage() {
     try {
       const { error } = await supabase.from("cost_groups").delete().eq("id", groupId);
       if (error) throw error;
+      dirtyRef.current = true;
       await refresh();
     } catch (err) {
       setErrorMsg(err.message);
@@ -383,6 +415,7 @@ export default function BuildDetailPage() {
         .update({ purchase_price: value === "" ? 0 : Number(value) })
         .eq("id", groupId);
       if (error) throw error;
+      dirtyRef.current = true;
       await refresh();
     } catch (err) {
       setErrorMsg(err.message);
@@ -396,6 +429,7 @@ export default function BuildDetailPage() {
         .update({ purchase_cost: value === "" ? null : Number(value) })
         .eq("id", partId);
       if (error) throw error;
+      dirtyRef.current = true;
       await refresh();
     } catch (err) {
       setErrorMsg(err.message);
@@ -416,9 +450,6 @@ export default function BuildDetailPage() {
   const isFromEstimate = build.sell_price != null;
   const inCostsMode = pricingMode === "costs";
 
-  // Same category-card layout for both modes — only what each part row
-  // shows (price vs. purchase cost, selection checkbox, group colour)
-  // changes based on pricingMode.
   const renderCategorySection = (category) => {
     const items = assignedParts.filter((p) => p.category === category);
     const essential = ESSENTIAL_CATEGORIES.includes(category);

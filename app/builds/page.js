@@ -26,10 +26,6 @@ export default function BuildsPage() {
   async function loadData() {
     if (!user) return;
     setLoading(true);
-    // RLS lets admins see every build (needed for the Admin page), but
-    // this page is a personal view — even an admin should only see
-    // builds they own or that have been shared with them here. Admins
-    // browse everything from Admin -> Builds instead.
     const ownershipFilter = `owner_id.eq.${user.id},shared_user_ids.cs.{${user.id}}`;
     const [{ data: buildsData, error: buildsError }, { data: partsData }, { data: costGroupsData }] =
       await Promise.all([
@@ -72,7 +68,11 @@ export default function BuildsPage() {
       setErrorMsg(error.message);
       return;
     }
-    router.push(`/builds/${data.id}`);
+    // The `new=1` flag tells the build detail page this was just created
+    // via this button (as opposed to an existing build being opened) —
+    // if nothing gets changed before leaving that page, it deletes itself
+    // instead of sitting around as an empty "New Build" entry.
+    router.push(`/builds/${data.id}?new=1`);
   }
 
   async function handleDelete(build) {
