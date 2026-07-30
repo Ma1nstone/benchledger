@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LogOut, Settings, User } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
@@ -8,6 +8,20 @@ import { useAuth } from "@/components/AuthProvider";
 export default function UserMenu() {
   const { user, profile, loading, signInWithGoogle, signOut } = useAuth();
   const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  // Close the moment a click lands anywhere outside the button/menu —
+  // covers clicking elsewhere on the page, not just picking a menu item.
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
 
   if (loading) return null;
 
@@ -23,7 +37,7 @@ export default function UserMenu() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2 rounded-full border border-graphite-700 bg-graphite-800 p-1 pr-3 text-sm text-white hover:border-graphite-600"

@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Calculator, Check, ExternalLink, ImagePlus, Link2, Plus, Wallet, X } from "lucide-react";
+import { ArrowLeft, Calculator, Check, ExternalLink, ImagePlus, Link2, Plus, Ungroup, Wallet, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { uploadImage } from "@/lib/uploadImage";
 import { usePasteImage } from "@/hooks/usePasteImage";
-import { CATEGORIES, ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
+import { CATEGORIES, ESSENTIAL_CATEGORIES, formatPrice, nextGroupColor } from "@/lib/constants";
 import PartPicker from "@/components/PartPicker";
 import BuildAssistant from "@/components/BuildAssistant";
 import ImageCropModal from "@/components/ImageCropModal";
@@ -37,13 +37,20 @@ export default function BuildDetailPage() {
   const [offerPrice, setOfferPrice] = useState("");
   const [sellPrice, setSellPrice] = useState("");
 
-  // "estimate" = the existing system, untouched. "costs" = the new,
-  // fully independent purchase-tracking system. Purely a UI toggle —
-  // neither mode ever writes to the other's fields.
   const [pricingMode, setPricingMode] = useState("estimate");
+  const modeInitialized = useRef(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  // Selection for grouping in Costs mode — lives here (not in CostsPanel)
+  // because selectable rows are rendered inline in the category grid,
+  // shared with Estimate mode.
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [costsBusy, setCostsBusy] = useState(false);
+
+  // Fetches everything. `silent` skips the loading-spinner swap so edits
+  // made from Costs mode (group price, purchase cost, etc.) just update
+  // the data in place instead of unmounting the whole page.
+  const fetchAll = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     const [
       { data: buildData, error: buildError },
       { data: partsData },
@@ -59,18 +66,31 @@ export default function BuildDetailPage() {
       return;
     }
     setBuild(buildData);
-    setName(buildData.name);
-    setLink(buildData.link || "");
-    setListingPrice(buildData.listing_price != null ? String(buildData.listing_price) : "");
-    if (!buildData.sold && buildData.accepted_price != null) {
-      setSoldPrice(String(buildData.accepted_price));
+    if (!silent) {
+      setName(buildData.name);
+      setLink(buildData.link || "");
+      setListingPrice(buildData.listing_price != null ? String(buildData.listing_price) : "");
+      if (!buildData.sold && buildData.accepted_price != null) {
+        setSoldPrice(String(buildData.accepted_price));
+      }
+      setOfferPrice(buildData.offer_price != null ? String(buildData.offer_price) : "");
+      setSellPrice(buildData.sell_price != null ? String(buildData.sell_price) : "");
     }
-    setOfferPrice(buildData.offer_price != null ? String(buildData.offer_price) : "");
-    setSellPrice(buildData.sell_price != null ? String(buildData.sell_price) : "");
     setAllParts(partsData || []);
     setCostGroups(costGroupsData || []);
-    setLoading(false);
+    if (!silent) setLoading(false);
+
+    // Default the Estimate/Costs switch to Costs once a build is sold
+    // (only the first time data loads, so it doesn't fight with the
+    // person manually flipping it back while they're on the page).
+    if (!modeInitialized.current) {
+      modeInitialized.current = true;
+      setPricingMode(buildData.sold ? "costs" : "estimate");
+    }
   }, [id]);
+
+  const loadData = useCallback(() => fetchAll(false), [fetchAll]);
+  const refresh = useCallback(() => fetchAll(true), [fetchAll]);
 
   useEffect(() => {
     loadData();
@@ -80,12 +100,35 @@ export default function BuildDetailPage() {
     () => allParts.filter((p) => p.build_id === id),
     [allParts, id]
   );
-  // Estimate total — always the sum of parts.price, exactly as before.
-  // The Costs system never touches this.
+  // Estimate total — always the sum of parts.price. The Costs system
+  // never reads or writes this.
   const total = assignedParts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
   const complete = ESSENTIAL_CATEGORIES.every((cat) =>
     assignedParts.some((p) => p.category === cat)
   );
+
+  const groupById = useMemo(() => {
+    const map = {};
+    costGroups.forEach((g) => (map[g.id] = g));
+    return map;
+  }, [costGroups]);
+
+  const partCountByGroup = useMemo(() => {
+    const map = {};
+    assignedParts.forEach((p) => {
+      if (!p.cost_group_id) return;
+      map[p.cost_group_id] = (map[p.cost_group_id] || 0) + 1;
+    });
+    return map;
+  }, [assignedParts]);
+
+  const totalPurchaseCost = useMemo(() => {
+    const groupsTotal = costGroups.reduce((sum, g) => sum + (Number(g.purchase_price) || 0), 0);
+    const ungroupedTotal = assignedParts
+      .filter((p) => !p.cost_group_id)
+      .reduce((sum, p) => sum + (Number(p.purchase_cost) || 0), 0);
+    return groupsTotal + ungroupedTotal;
+  }, [costGroups, assignedParts]);
 
   async function saveName() {
     if (!build || name === build.name) return;
@@ -190,8 +233,6 @@ export default function BuildDetailPage() {
   async function removePart(part) {
     const { error } = await supabase
       .from("parts")
-      // Leaving a build also clears any purchase-group membership — a
-      // cost group only makes sense for parts actually inside this build.
       .update({ build_id: null, cost_group_id: null })
       .eq("id", part.id);
     if (error) {
@@ -201,6 +242,12 @@ export default function BuildDetailPage() {
     setAllParts((prev) =>
       prev.map((p) => (p.id === part.id ? { ...p, build_id: null, cost_group_id: null } : p))
     );
+    setSelectedIds((prev) => {
+      if (!prev.has(part.id)) return prev;
+      const next = new Set(prev);
+      next.delete(part.id);
+      return next;
+    });
   }
 
   function updatePartField(partId, field, value) {
@@ -235,6 +282,126 @@ export default function BuildDetailPage() {
     router.push("/sales");
   }
 
+  // --- Costs mode: selection + group actions -----------------------------
+
+  function toggleSelect(partId) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(partId)) next.delete(partId);
+      else next.add(partId);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function handleCreateGroup(priceValue) {
+    if (selectedIds.size === 0) return;
+    setCostsBusy(true);
+    try {
+      const color = nextGroupColor(costGroups.map((g) => g.color));
+      const { data: group, error: groupError } = await supabase
+        .from("cost_groups")
+        .insert({
+          build_id: id,
+          purchase_price: priceValue === "" ? 0 : Number(priceValue),
+          color,
+        })
+        .select()
+        .single();
+      if (groupError) throw groupError;
+
+      const { error: partsError } = await supabase
+        .from("parts")
+        .update({ cost_group_id: group.id })
+        .in("id", Array.from(selectedIds));
+      if (partsError) throw partsError;
+
+      clearSelection();
+      await refresh();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setCostsBusy(false);
+    }
+  }
+
+  async function handleAddToGroup(groupId) {
+    if (selectedIds.size === 0) return;
+    setCostsBusy(true);
+    try {
+      const { error } = await supabase
+        .from("parts")
+        .update({ cost_group_id: groupId })
+        .in("id", Array.from(selectedIds));
+      if (error) throw error;
+      clearSelection();
+      await refresh();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setCostsBusy(false);
+    }
+  }
+
+  async function handleRemoveFromGroup(partId) {
+    setCostsBusy(true);
+    try {
+      const { error } = await supabase
+        .from("parts")
+        .update({ cost_group_id: null })
+        .eq("id", partId);
+      if (error) throw error;
+      await refresh();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setCostsBusy(false);
+    }
+  }
+
+  async function handleDeleteGroup(groupId) {
+    if (!confirm("Delete this purchase group? Its parts go back to ungrouped.")) return;
+    setCostsBusy(true);
+    try {
+      const { error } = await supabase.from("cost_groups").delete().eq("id", groupId);
+      if (error) throw error;
+      await refresh();
+    } catch (err) {
+      setErrorMsg(err.message);
+    } finally {
+      setCostsBusy(false);
+    }
+  }
+
+  async function handleUpdateGroupPrice(groupId, value) {
+    try {
+      const { error } = await supabase
+        .from("cost_groups")
+        .update({ purchase_price: value === "" ? 0 : Number(value) })
+        .eq("id", groupId);
+      if (error) throw error;
+      await refresh();
+    } catch (err) {
+      setErrorMsg(err.message);
+    }
+  }
+
+  async function handleUpdatePurchaseCost(partId, value) {
+    try {
+      const { error } = await supabase
+        .from("parts")
+        .update({ purchase_cost: value === "" ? null : Number(value) })
+        .eq("id", partId);
+      if (error) throw error;
+      await refresh();
+    } catch (err) {
+      setErrorMsg(err.message);
+    }
+  }
+
   if (loading) return <p className="text-sm text-graphite-500">Loading build…</p>;
   if (!build)
     return (
@@ -247,7 +414,11 @@ export default function BuildDetailPage() {
     );
 
   const isFromEstimate = build.sell_price != null;
+  const inCostsMode = pricingMode === "costs";
 
+  // Same category-card layout for both modes — only what each part row
+  // shows (price vs. purchase cost, selection checkbox, group colour)
+  // changes based on pricingMode.
   const renderCategorySection = (category) => {
     const items = assignedParts.filter((p) => p.category === category);
     const essential = ESSENTIAL_CATEGORIES.includes(category);
@@ -267,49 +438,113 @@ export default function BuildDetailPage() {
               </span>
             )}
           </div>
-          <button
-            onClick={() => setPickerCategory(category)}
-            className="flex items-center gap-1 rounded-lg bg-graphite-800 px-2.5 py-1 text-xs font-medium text-trace-400 hover:bg-graphite-700"
-          >
-            <Plus size={13} />
-            Add {category}
-          </button>
+          {!inCostsMode && (
+            <button
+              onClick={() => setPickerCategory(category)}
+              className="flex items-center gap-1 rounded-lg bg-graphite-800 px-2.5 py-1 text-xs font-medium text-trace-400 hover:bg-graphite-700"
+            >
+              <Plus size={13} />
+              Add {category}
+            </button>
+          )}
         </div>
 
         {items.length === 0 ? (
           <p className="text-xs text-graphite-500">Nothing assigned.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {items.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-2 rounded-lg bg-graphite-800/60 px-3 py-2 text-sm"
-              >
-                <input
-                  value={p.name}
-                  onChange={(e) => updatePartField(p.id, "name", e.target.value)}
-                  onBlur={() => savePartField(p.id, "name")}
-                  className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-white focus:bg-graphite-900 focus:outline-none focus:ring-1 focus:ring-trace-500"
-                />
-                <span className="shrink-0 font-mono text-graphite-500">£</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={p.price}
-                  onChange={(e) => updatePartField(p.id, "price", e.target.value)}
-                  onBlur={() => savePartField(p.id, "price")}
-                  className="w-20 shrink-0 rounded bg-graphite-900 px-2 py-1 text-right font-mono text-graphite-300 focus:outline-none focus:ring-1 focus:ring-trace-500"
-                />
-                <button
-                  onClick={() => removePart(p)}
-                  className="shrink-0 text-graphite-500 hover:text-signal-red"
-                  aria-label={`Remove ${p.name}`}
+            {items.map((p) => {
+              const group = inCostsMode && p.cost_group_id ? groupById[p.cost_group_id] : null;
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-lg bg-graphite-800/60 px-3 py-2 text-sm"
+                  style={group ? { boxShadow: `inset 3px 0 0 0 ${group.color}` } : undefined}
                 >
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
+                  {inCostsMode && (
+                    <button
+                      onClick={() => toggleSelect(p.id)}
+                      className={`grid h-5 w-5 shrink-0 place-items-center rounded border transition ${
+                        selectedIds.has(p.id)
+                          ? "border-trace-500 bg-trace-500 text-graphite-950"
+                          : "border-graphite-600 bg-graphite-900"
+                      }`}
+                      aria-label={`Select ${p.name}`}
+                    >
+                      {selectedIds.has(p.id) && <Check size={12} strokeWidth={3} />}
+                    </button>
+                  )}
+
+                  {inCostsMode ? (
+                    <span className="min-w-0 flex-1 truncate text-white">{p.name}</span>
+                  ) : (
+                    <input
+                      value={p.name}
+                      onChange={(e) => updatePartField(p.id, "name", e.target.value)}
+                      onBlur={() => savePartField(p.id, "name")}
+                      className="min-w-0 flex-1 truncate rounded bg-transparent px-1 text-white focus:bg-graphite-900 focus:outline-none focus:ring-1 focus:ring-trace-500"
+                    />
+                  )}
+
+                  {inCostsMode ? (
+                    group ? (
+                      <span className="shrink-0 text-xs text-graphite-500">
+                        in group ({formatPrice(group.purchase_price)})
+                      </span>
+                    ) : (
+                      <>
+                        <span className="shrink-0 font-mono text-graphite-500">£</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          defaultValue={p.purchase_cost ?? ""}
+                          onBlur={(e) => handleUpdatePurchaseCost(p.id, e.target.value)}
+                          placeholder="0.00"
+                          className="w-20 shrink-0 rounded bg-graphite-900 px-2 py-1 text-right font-mono text-graphite-300 placeholder:text-graphite-600 focus:outline-none focus:ring-1 focus:ring-trace-500"
+                        />
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <span className="shrink-0 font-mono text-graphite-500">£</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={p.price}
+                        onChange={(e) => updatePartField(p.id, "price", e.target.value)}
+                        onBlur={() => savePartField(p.id, "price")}
+                        className="w-20 shrink-0 rounded bg-graphite-900 px-2 py-1 text-right font-mono text-graphite-300 focus:outline-none focus:ring-1 focus:ring-trace-500"
+                      />
+                    </>
+                  )}
+
+                  {inCostsMode ? (
+                    group ? (
+                      <button
+                        onClick={() => handleRemoveFromGroup(p.id)}
+                        className="shrink-0 text-graphite-500 hover:text-signal-red"
+                        aria-label={`Remove ${p.name} from group`}
+                        title="Remove from group"
+                      >
+                        <Ungroup size={14} />
+                      </button>
+                    ) : (
+                      <span className="w-3.5 shrink-0" />
+                    )
+                  ) : (
+                    <button
+                      onClick={() => removePart(p)}
+                      className="shrink-0 text-graphite-500 hover:text-signal-red"
+                      aria-label={`Remove ${p.name}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -421,13 +656,6 @@ export default function BuildDetailPage() {
         )}
       </div>
 
-      {/* Pricing: total is always the sum of parts below and can't be typed
-          into directly. Listing price and offer price are editable on every
-          build. Sell price only appears on builds that came from the
-          Estimate tool. Profit is deliberately NOT shown here anymore — it
-          only appears on the Sales page, once a build is sold, calculated
-          from Total Purchase Cost (Costs mode) rather than these estimate
-          figures. */}
       <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-graphite-700 bg-graphite-900 p-4 sm:grid-cols-4">
         <div className="rounded-lg bg-graphite-800/60 p-3">
           <p className="text-xs text-graphite-500">Estimate (sum of parts)</p>
@@ -482,7 +710,6 @@ export default function BuildDetailPage() {
         )}
       </div>
 
-      {/* Estimate / Costs switch — two fully independent views. */}
       <div className="mb-6 flex w-fit gap-1 rounded-full border border-graphite-700 bg-graphite-900 p-1">
         <button
           onClick={() => setPricingMode("estimate")}
@@ -514,31 +741,34 @@ export default function BuildDetailPage() {
         </p>
       )}
 
-      {pricingMode === "estimate" ? (
-        <>
-          <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
-            Essential parts
-          </h2>
-          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {ESSENTIAL_CATEGORIES.map(renderCategorySection)}
-          </div>
-
-          <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
-            Optional parts
-          </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {OPTIONAL_CATEGORIES.map(renderCategorySection)}
-          </div>
-        </>
-      ) : (
+      {inCostsMode && (
         <CostsPanel
-          buildId={id}
-          parts={assignedParts}
           costGroups={costGroups}
-          onRefresh={loadData}
-          onError={setErrorMsg}
+          partCountByGroup={partCountByGroup}
+          selectedIds={selectedIds}
+          onClearSelection={clearSelection}
+          onCreateGroup={handleCreateGroup}
+          onAddToGroup={handleAddToGroup}
+          onUpdateGroupPrice={handleUpdateGroupPrice}
+          onDeleteGroup={handleDeleteGroup}
+          totalPurchaseCost={totalPurchaseCost}
+          busy={costsBusy}
         />
       )}
+
+      <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
+        Essential parts
+      </h2>
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {ESSENTIAL_CATEGORIES.map(renderCategorySection)}
+      </div>
+
+      <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-graphite-500">
+        Optional parts
+      </h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {OPTIONAL_CATEGORIES.map(renderCategorySection)}
+      </div>
 
       {pendingImageFile && (
         <ImageCropModal
