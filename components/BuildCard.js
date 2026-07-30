@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeftRight, ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2, User } from "lucide-react";
 import { ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 
-export default function BuildCard({ build, parts, ownerName, showOwner, onDelete, onMoveTab }) {
+export default function BuildCard({ build, parts, costGroups = [], ownerName, showOwner, onDelete, onMoveTab }) {
   const [open, setOpen] = useState(false);
 
   const total = parts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
@@ -18,6 +18,23 @@ export default function BuildCard({ build, parts, ownerName, showOwner, onDelete
     acc[p.category].push(p);
     return acc;
   }, {});
+
+  const groupById = useMemo(() => {
+    const map = {};
+    costGroups.forEach((g) => (map[g.id] = g));
+    return map;
+  }, [costGroups]);
+
+  // The dropdown shows Costs-mode figures (what was actually paid), not
+  // the Estimate value — grouped parts show their shared group price,
+  // ungrouped parts show their own purchase_cost.
+  const totalPurchaseCost = useMemo(() => {
+    const groupsTotal = costGroups.reduce((sum, g) => sum + (Number(g.purchase_price) || 0), 0);
+    const ungroupedTotal = parts
+      .filter((p) => !p.cost_group_id)
+      .reduce((sum, p) => sum + (Number(p.purchase_cost) || 0), 0);
+    return groupsTotal + ungroupedTotal;
+  }, [costGroups, parts]);
 
   return (
     <div className="overflow-hidden rounded-xl border border-graphite-700 bg-graphite-900 transition hover:border-graphite-600">
@@ -148,18 +165,39 @@ export default function BuildCard({ build, parts, ownerName, showOwner, onDelete
                     <p className="mb-1 font-mono text-[11px] uppercase tracking-wide text-trace-400">
                       {category}
                     </p>
-                    {items.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between text-sm">
-                        <span className="truncate text-graphite-300">{p.name}</span>
-                        <span className="ml-2 shrink-0 font-mono text-graphite-400">
-                          {formatPrice(p.price)}
-                        </span>
-                      </div>
-                    ))}
+                    {items.map((p) => {
+                      const group = p.cost_group_id ? groupById[p.cost_group_id] : null;
+                      return (
+                        <div key={p.id} className="flex items-center justify-between text-sm">
+                          <span className="flex min-w-0 items-center gap-1.5 truncate text-graphite-300">
+                            {group && (
+                              <span
+                                className="h-2 w-2 shrink-0 rounded-full"
+                                style={{ backgroundColor: group.color }}
+                              />
+                            )}
+                            {p.name}
+                          </span>
+                          <span className="ml-2 shrink-0 font-mono text-graphite-400">
+                            {group
+                              ? `in group (${formatPrice(group.purchase_price)})`
+                              : formatPrice(p.purchase_cost)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 ))}
               </div>
             )}
+
+            <div className="mt-3 flex items-center justify-between border-t border-graphite-700 pt-3 text-sm">
+              <span className="text-graphite-500">Total purchase cost</span>
+              <span className="font-mono font-semibold text-white">
+                {formatPrice(totalPurchaseCost)}
+              </span>
+            </div>
+
             {!complete && (
               <p className="mt-3 text-xs text-signal-red">
                 Missing:{" "}

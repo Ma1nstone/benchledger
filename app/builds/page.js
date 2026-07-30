@@ -17,34 +17,43 @@ export default function BuildsPage() {
   const { user } = useAuth();
   const [builds, setBuilds] = useState([]);
   const [parts, setParts] = useState([]);
+  const [costGroups, setCostGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [subtab, setSubtab] = useState("manual");
 
   async function loadData() {
+    if (!user) return;
     setLoading(true);
-    // RLS already scopes this to builds you own or that have been shared
-    // with you (plus everything, for admins) — no extra filtering needed.
-    const [{ data: buildsData, error: buildsError }, { data: partsData }] =
+    // RLS lets admins see every build (needed for the Admin page), but
+    // this page is a personal view — even an admin should only see
+    // builds they own or that have been shared with them here. Admins
+    // browse everything from Admin -> Builds instead.
+    const ownershipFilter = `owner_id.eq.${user.id},shared_user_ids.cs.{${user.id}}`;
+    const [{ data: buildsData, error: buildsError }, { data: partsData }, { data: costGroupsData }] =
       await Promise.all([
         supabase
           .from("builds")
           .select("*, owner:profiles!owner_id(name, email)")
           .eq("sold", false)
           .is("deleted_at", null)
+          .or(ownershipFilter)
           .order("created_at", { ascending: false }),
         supabase.from("parts").select("*").not("build_id", "is", null),
+        supabase.from("cost_groups").select("*"),
       ]);
     if (buildsError) setErrorMsg(buildsError.message);
     setBuilds(buildsData || []);
     setParts(partsData || []);
+    setCostGroups(costGroupsData || []);
     setLoading(false);
   }
 
   useEffect(() => {
     loadData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const visibleBuilds = useMemo(
     () => builds.filter((b) => (b.source || "manual") === subtab),
@@ -166,6 +175,7 @@ export default function BuildsPage() {
               key={build.id}
               build={build}
               parts={parts.filter((p) => p.build_id === build.id)}
+              costGroups={costGroups.filter((g) => g.build_id === build.id)}
               ownerName={build.owner?.name || build.owner?.email}
               showOwner={build.owner_id !== user?.id}
               onDelete={handleDelete}

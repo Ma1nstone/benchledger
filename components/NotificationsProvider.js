@@ -110,30 +110,43 @@ export function NotificationsProvider({ children }) {
     return result;
   }
 
-  // Fires a real OS-level notification if permitted; otherwise falls back
-  // to the in-app bottom-right toast.
+  // Tries a real OS-level notification if permitted, but — unlike before —
+  // this never silently swallows a failure. If the OS notification can't
+  // be created for any reason (permission revoked at the OS level after
+  // the browser last checked, page not focused, etc.), it falls straight
+  // through to the in-app toast instead of doing nothing. That's what was
+  // making "Send test notification" look broken: the OS Notification()
+  // call was throwing before ever reaching the toast fallback.
   function notify(title, body, messageId) {
+    let osNotified = false;
+
     if (browserNotifSupported() && notifPermission === "granted") {
-      const n = new Notification(title, {
-        body: body || "PC Scout",
-        icon: "/favicon.svg?v=2",
-      });
-      n.onclick = () => {
-        window.focus();
-        if (messageId) router.push(`/messages/${messageId}`);
-        n.close();
-      };
-      return;
+      try {
+        const n = new Notification(title, {
+          body: body || "PC Scout",
+          icon: "/favicon.svg?v=2",
+        });
+        n.onclick = () => {
+          window.focus();
+          if (messageId) router.push(`/messages/${messageId}`);
+          n.close();
+        };
+        osNotified = true;
+      } catch (err) {
+        console.error("OS notification failed, falling back to in-app toast:", err);
+      }
     }
 
-    // Fallback: in-app toast, since native notifications aren't available
-    // or the user hasn't granted permission yet.
+    // Always show the in-app toast too — it's the one guaranteed-visible
+    // signal regardless of OS notification permissions/focus/support.
     if (soundEnabled) playBeep();
     const toastId = `${messageId || "toast"}-${Date.now()}`;
     setToasts((prev) => [...prev, { id: toastId, messageId, title }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== toastId));
     }, 6000);
+
+    return osNotified;
   }
 
   useEffect(() => {
@@ -233,7 +246,8 @@ export function NotificationsProvider({ children }) {
   }
 
   // Confirms notifications are actually working on this device/browser —
-  // fires a real OS notification if permitted, otherwise the in-app toast.
+  // always produces a visible in-app toast at minimum, plus a real OS
+  // notification if permission is granted and it doesn't fail.
   function sendTestPing() {
     notify("Test ping", "Notifications are working!", null);
   }

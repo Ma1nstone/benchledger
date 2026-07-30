@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { ChevronDown, Tag, Trash2, RotateCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { formatPrice } from "@/lib/constants";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function SalesPage() {
+  const { user } = useAuth();
   const [builds, setBuilds] = useState([]);
   const [parts, setParts] = useState([]);
   const [costGroups, setCostGroups] = useState([]);
@@ -14,11 +16,15 @@ export default function SalesPage() {
   const [openId, setOpenId] = useState(null);
 
   useEffect(() => {
-    load();
-  }, []);
+    if (user) load();
+  }, [user]);
 
   async function load() {
     setLoading(true);
+    // Same principle as the Builds page: even an admin only sees their
+    // own/shared sold builds here — everything is still browsable from
+    // Admin -> Builds.
+    const ownershipFilter = `owner_id.eq.${user.id},shared_user_ids.cs.{${user.id}}`;
     const [{ data: buildsData }, { data: partsData }, { data: costGroupsData }] =
       await Promise.all([
         supabase
@@ -26,10 +32,8 @@ export default function SalesPage() {
           .select("*")
           .eq("sold", true)
           .is("deleted_at", null)
+          .or(ownershipFilter)
           .order("sold_at", { ascending: false }),
-        // cost_group_id + purchase_cost are needed for the Total Purchase
-        // Cost calculation below — price stays here too since the parts
-        // breakdown still shows each part's Estimate price for reference.
         supabase
           .from("parts")
           .select("id, build_id, name, category, price, cost_group_id, purchase_cost"),
@@ -45,14 +49,18 @@ export default function SalesPage() {
     return parts.filter((p) => p.build_id === buildId);
   }
 
+  function groupsFor(buildId) {
+    return costGroups.filter((g) => g.build_id === buildId);
+  }
+
   // Total Purchase Cost = sum of every purchase group for this build +
-  // sum of the purchase cost of every ungrouped part in it. This is what
-  // was actually paid — completely separate from the Estimate total.
+  // sum of the purchase cost of every ungrouped part in it.
   function totalPurchaseCostFor(buildId) {
     const buildParts = partsFor(buildId);
-    const groupsTotal = costGroups
-      .filter((g) => g.build_id === buildId)
-      .reduce((sum, g) => sum + (Number(g.purchase_price) || 0), 0);
+    const groupsTotal = groupsFor(buildId).reduce(
+      (sum, g) => sum + (Number(g.purchase_price) || 0),
+      0
+    );
     const ungroupedTotal = buildParts
       .filter((p) => !p.cost_group_id)
       .reduce((sum, p) => sum + (Number(p.purchase_cost) || 0), 0);
@@ -108,7 +116,7 @@ export default function SalesPage() {
         <h1 className="font-display text-2xl font-bold text-white">Sales</h1>
         <p className="text-sm text-graphite-500">
           Builds you&rsquo;ve marked as sold, most recent first. Profit is Sale price minus Total
-          Purchase Cost from the Costs tab — not the Estimate total.
+          Purchase Cost from the Costs tab.
         </p>
       </div>
 
@@ -131,6 +139,9 @@ export default function SalesPage() {
         <div className="flex flex-col gap-3">
           {builds.map((build) => {
             const buildParts = partsFor(build.id);
+            const buildGroups = groupsFor(build.id);
+            const groupById = {};
+            buildGroups.forEach((g) => (groupById[g.id] = g));
             const purchaseCost = totalPurchaseCostFor(build.id);
             const profit = (Number(build.sold_price) || 0) - purchaseCost;
             const isOpen = openId === build.id;
@@ -236,26 +247,40 @@ export default function SalesPage() {
                               <p className="mb-1 font-mono text-[11px] uppercase tracking-wide text-trace-400">
                                 {category}
                               </p>
-                              {items.map((p) => (
-                                <div
-                                  key={p.id}
-                                  className="flex items-center justify-between text-sm"
-                                >
-                                  <span className="truncate text-graphite-300">{p.name}</span>
-                                  <span className="ml-2 shrink-0 font-mono text-graphite-400">
-                                    {formatPrice(p.price)}
-                                  </span>
-                                </div>
-                              ))}
+                              {items.map((p) => {
+                                const group = p.cost_group_id ? groupById[p.cost_group_id] : null;
+                                return (
+                                  <div
+                                    key={p.id}
+                                    className="flex items-center justify-between text-sm"
+                                  >
+                                    <span className="flex min-w-0 items-center gap-1.5 truncate text-graphite-300">
+                                      {group && (
+                                        <span
+                                          className="h-2 w-2 shrink-0 rounded-full"
+                                          style={{ backgroundColor: group.color }}
+                                        />
+                                      )}
+                                      {p.name}
+                                    </span>
+                                    <span className="ml-2 shrink-0 font-mono text-graphite-400">
+                                      {group
+                                        ? `in group (${formatPrice(group.purchase_price)})`
+                                        : formatPrice(p.purchase_cost)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           ))}
                         </div>
                       )}
-                      <p className="mt-3 text-[11px] text-graphite-600">
-                        Prices above are each part&rsquo;s Estimate value, shown for reference.
-                        Profit uses the Total Purchase Cost from this build&rsquo;s Costs tab
-                        instead.
-                      </p>
+                      <div className="mt-3 flex items-center justify-between border-t border-graphite-700 pt-3 text-sm">
+                        <span className="text-graphite-500">Total purchase cost</span>
+                        <span className="font-mono font-semibold text-white">
+                          {formatPrice(purchaseCost)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
