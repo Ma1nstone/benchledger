@@ -2,10 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeftRight, ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2, User } from "lucide-react";
 import { ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 
 export default function BuildCard({ build, parts, costGroups = [], ownerName, showOwner, onDelete, onMoveTab }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   const total = parts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
@@ -25,9 +27,6 @@ export default function BuildCard({ build, parts, costGroups = [], ownerName, sh
     return map;
   }, [costGroups]);
 
-  // The dropdown shows Costs-mode figures (what was actually paid), not
-  // the Estimate value — grouped parts show their shared group price,
-  // ungrouped parts show their own purchase_cost.
   const totalPurchaseCost = useMemo(() => {
     const groupsTotal = costGroups.reduce((sum, g) => sum + (Number(g.purchase_price) || 0), 0);
     const ungroupedTotal = parts
@@ -36,12 +35,21 @@ export default function BuildCard({ build, parts, costGroups = [], ownerName, sh
     return groupsTotal + ungroupedTotal;
   }, [costGroups, parts]);
 
+  // Double-click jumps straight to the build's edit page — same
+  // destination as the pencil icon. Single click keeps doing exactly
+  // what it always did (expand/collapse this card).
+  function handleDoubleClick(e) {
+    e.stopPropagation();
+    router.push(`/builds/${build.id}`);
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-graphite-700 bg-graphite-900 transition hover:border-graphite-600">
       <div
         role="button"
         tabIndex={0}
         onClick={() => setOpen((o) => !o)}
+        onDoubleClick={handleDoubleClick}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen((o) => !o)}
         className="flex cursor-pointer items-center gap-4 p-4"
       >

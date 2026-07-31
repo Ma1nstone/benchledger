@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, X, ZoomIn } from "lucide-react";
+import { AlertTriangle, Check, Loader2, X, ZoomIn } from "lucide-react";
 
 const VIEWPORT = 320; // px, square crop viewport shown on screen
 const OUTPUT = 512; // px, final cropped image size
@@ -10,8 +10,16 @@ const OUTPUT = 512; // px, final cropped image size
 // use the slider to zoom, "Crop & Use" renders exactly what's inside the
 // viewport to a canvas and hands back a real File — same shape as what a
 // file input gives you, so it drops straight into an existing upload flow.
+//
+// Reads the picked file via FileReader -> data URL rather than
+// URL.createObjectURL()'s blob: URL. Object URLs are usually fine, but in
+// some browser privacy modes / extensions / edge-CDN setups they can
+// silently fail to render — the <img> just never loads, with no error,
+// which looks exactly like a blank black box. Data URLs don't have that
+// failure mode.
 export default function ImageCropModal({ file, onCancel, onCropped }) {
   const [imgEl, setImgEl] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [baseScale, setBaseScale] = useState(1);
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -20,21 +28,40 @@ export default function ImageCropModal({ file, onCancel, onCropped }) {
 
   useEffect(() => {
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      // "Cover" the viewport so there's never empty space around the crop.
-      const scale = Math.max(VIEWPORT / img.width, VIEWPORT / img.height);
-      setBaseScale(scale);
-      setZoom(1);
-      setOffset({
-        x: (VIEWPORT - img.width * scale) / 2,
-        y: (VIEWPORT - img.height * scale) / 2,
-      });
-      setImgEl(img);
+    let cancelled = false;
+    setLoadError(null);
+    setImgEl(null);
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (cancelled) return;
+      const img = new Image();
+      img.onload = () => {
+        if (cancelled) return;
+        // "Cover" the viewport so there's never empty space around the crop.
+        const scale = Math.max(VIEWPORT / img.width, VIEWPORT / img.height);
+        setBaseScale(scale);
+        setZoom(1);
+        setOffset({
+          x: (VIEWPORT - img.width * scale) / 2,
+          y: (VIEWPORT - img.height * scale) / 2,
+        });
+        setImgEl(img);
+      };
+      img.onerror = () => {
+        if (!cancelled) setLoadError("Couldn't read that image — try a different file.");
+      };
+      img.src = reader.result;
     };
-    img.src = url;
-    return () => URL.revokeObjectURL(url);
+    reader.onerror = () => {
+      if (!cancelled) setLoadError("Couldn't read that image — try a different file.");
+    };
+    reader.readAsDataURL(file);
+
+    return () => {
+      cancelled = true;
+    };
   }, [file]);
 
   const scale = baseScale * zoom;
@@ -119,11 +146,11 @@ export default function ImageCropModal({ file, onCancel, onCropped }) {
         <div
           className="relative mx-auto overflow-hidden rounded-lg bg-graphite-950 ring-1 ring-graphite-700"
           style={{ width: VIEWPORT, height: VIEWPORT, touchAction: "none" }}
-          onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
+          onMouseDown={(e) => imgEl && startDrag(e.clientX, e.clientY)}
           onMouseMove={(e) => dragRef.current && moveDrag(e.clientX, e.clientY)}
           onMouseUp={endDrag}
           onMouseLeave={endDrag}
-          onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
+          onTouchStart={(e) => imgEl && startDrag(e.touches[0].clientX, e.touches[0].clientY)}
           onTouchMove={(e) => {
             if (dragRef.current) {
               e.preventDefault();
@@ -146,6 +173,20 @@ export default function ImageCropModal({ file, onCancel, onCropped }) {
               }}
             />
           )}
+
+          {!imgEl && !loadError && (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-graphite-500">
+              <Loader2 size={22} className="animate-spin" />
+              <p className="text-xs">Loading photo…</p>
+            </div>
+          )}
+
+          {loadError && (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center text-signal-red">
+              <AlertTriangle size={22} />
+              <p className="text-xs">{loadError}</p>
+            </div>
+          )}
         </div>
 
         <div className="mt-4 flex items-center gap-2">
@@ -157,7 +198,8 @@ export default function ImageCropModal({ file, onCancel, onCropped }) {
             step="0.01"
             value={zoom}
             onChange={handleZoomChange}
-            className="w-full accent-trace-500"
+            disabled={!imgEl}
+            className="w-full accent-trace-500 disabled:opacity-40"
           />
         </div>
 
