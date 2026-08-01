@@ -1,52 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2, User } from "lucide-react";
 import { ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 
-// Native dblclick fires two separate click events first, then a dblclick
-// event — so a plain onClick+onDoubleClick pair means every double-click
-// toggles the dropdown open (click 1), toggles it shut again (click 2),
-// and only then navigates (dblclick), producing a visible flash. Delaying
-// the single-click action and cancelling it if a second click lands
-// within the window fixes that: a real single click still opens/closes
-// normally (just ~200ms later), a double-click never touches the
-// dropdown state at all.
-const CLICK_DELAY = 220;
-
 export default function BuildCard({ build, parts, costGroups = [], ownerName, showOwner, onDelete, onMoveTab }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const clickTimerRef = useRef(null);
 
-  useEffect(() => {
-    return () => {
-      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-    };
-  }, []);
-
-  function handleClick() {
-    if (clickTimerRef.current) {
-      // A second click arrived before the first one's timer fired — this
-      // is a double-click, so don't toggle the dropdown at all.
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-      return;
-    }
-    clickTimerRef.current = setTimeout(() => {
-      setOpen((o) => !o);
-      clickTimerRef.current = null;
-    }, CLICK_DELAY);
-  }
-
-  function handleDoubleClick(e) {
-    e.stopPropagation();
-    if (clickTimerRef.current) {
-      clearTimeout(clickTimerRef.current);
-      clickTimerRef.current = null;
-    }
+  // Right-click opens the edit page instead of the browser's own context
+  // menu — left click stays instant and only ever toggles the dropdown.
+  function handleContextMenu(e) {
+    e.preventDefault();
     router.push(`/builds/${build.id}`);
   }
 
@@ -80,8 +47,8 @@ export default function BuildCard({ build, parts, costGroups = [], ownerName, sh
       <div
         role="button"
         tabIndex={0}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
+        onClick={() => setOpen((o) => !o)}
+        onContextMenu={handleContextMenu}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen((o) => !o)}
         className="flex cursor-pointer items-center gap-4 p-4"
       >
