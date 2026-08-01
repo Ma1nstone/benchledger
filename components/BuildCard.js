@@ -1,14 +1,54 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, ChevronDown, ExternalLink, MonitorSmartphone, Pencil, Trash2, User } from "lucide-react";
 import { ESSENTIAL_CATEGORIES, formatPrice } from "@/lib/constants";
 
+// Native dblclick fires two separate click events first, then a dblclick
+// event — so a plain onClick+onDoubleClick pair means every double-click
+// toggles the dropdown open (click 1), toggles it shut again (click 2),
+// and only then navigates (dblclick), producing a visible flash. Delaying
+// the single-click action and cancelling it if a second click lands
+// within the window fixes that: a real single click still opens/closes
+// normally (just ~200ms later), a double-click never touches the
+// dropdown state at all.
+const CLICK_DELAY = 220;
+
 export default function BuildCard({ build, parts, costGroups = [], ownerName, showOwner, onDelete, onMoveTab }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const clickTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    };
+  }, []);
+
+  function handleClick() {
+    if (clickTimerRef.current) {
+      // A second click arrived before the first one's timer fired — this
+      // is a double-click, so don't toggle the dropdown at all.
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => {
+      setOpen((o) => !o);
+      clickTimerRef.current = null;
+    }, CLICK_DELAY);
+  }
+
+  function handleDoubleClick(e) {
+    e.stopPropagation();
+    if (clickTimerRef.current) {
+      clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = null;
+    }
+    router.push(`/builds/${build.id}`);
+  }
 
   const total = parts.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
   const complete = ESSENTIAL_CATEGORIES.every((cat) =>
@@ -35,20 +75,12 @@ export default function BuildCard({ build, parts, costGroups = [], ownerName, sh
     return groupsTotal + ungroupedTotal;
   }, [costGroups, parts]);
 
-  // Double-click jumps straight to the build's edit page — same
-  // destination as the pencil icon. Single click keeps doing exactly
-  // what it always did (expand/collapse this card).
-  function handleDoubleClick(e) {
-    e.stopPropagation();
-    router.push(`/builds/${build.id}`);
-  }
-
   return (
     <div className="overflow-hidden rounded-xl border border-graphite-700 bg-graphite-900 transition hover:border-graphite-600">
       <div
         role="button"
         tabIndex={0}
-        onClick={() => setOpen((o) => !o)}
+        onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen((o) => !o)}
         className="flex cursor-pointer items-center gap-4 p-4"
